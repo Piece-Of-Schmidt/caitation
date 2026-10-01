@@ -97,6 +97,8 @@ widerspricht, jeweils mit wörtlichem Zitat.
 Dashboard mit Themen-Landkarte der ganzen Bibliothek, Dubletten-Finder, BibTeX-Export,
 Filter nach Sammlung, Tag, Typ und Jahr, Gruppenbibliotheken.
 
+<img src="docs/images/dashboard.png" alt="Dashboard mit Kennzahlen und Themen-Landkarte der Bibliothek" width="100%">
+
 </td>
 </tr>
 </table>
