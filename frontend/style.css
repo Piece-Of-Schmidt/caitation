@@ -1116,3 +1116,41 @@ mark {
   border-radius: 4px;
   padding: 0 5px;
 }
+
+/* ================================================================ quote checks */
+
+.quote-check { border-radius: 2px; }
+.quote-check.is-verified { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--good) 55%, transparent); }
+.quote-check.is-deviates { box-shadow: inset 0 -2px 0 var(--warn); background: var(--warn-soft); }
+.quote-check.is-missing { text-decoration: underline wavy var(--danger); text-underline-offset: 3px; background: var(--danger-soft); }
+
+.quote-badge {
+  display: inline-block;
+  margin-left: 2px;
+  font-size: 0.75em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.quote-badge.is-verified { color: var(--good); }
+.quote-badge.is-deviates { color: var(--warn); }
+.quote-badge.is-missing { color: var(--danger); }
+
+.quote-summary {
+  margin-top: 14px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.quote-summary.is-verified { border-color: color-mix(in srgb, var(--good) 35%, transparent); }
+.quote-summary.is-deviates { border-color: var(--warn); background: var(--warn-soft); }
+.quote-summary.is-missing { border-color: var(--danger); background: var(--danger-soft); }
+.quote-summary summary { cursor: pointer; font-weight: 600; }
+.quote-summary ul { margin: 8px 0 2px; padding-left: 0; list-style: none; }
+.quote-summary li { margin-bottom: 6px; color: var(--text-2); }
+.quote-summary li .quote-badge { margin: 0 6px 0 0; font-size: 0.95em; }
+.quote-src { display: block; margin-left: 20px; font-size: 12px; color: var(--text-3); }
+.quote-hint { margin: 6px 0 0; font-size: 12.5px; color: var(--danger); font-weight: 600; }

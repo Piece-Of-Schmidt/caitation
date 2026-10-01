@@ -583,6 +583,7 @@ async function streamAsk(query, mode, filters) {
   let answer = "";
   let aborted = false;
   let failed = null;
+  let quoteChecks = [];
   let frame = 0;
   const paint = () => {
     frame = 0;
@@ -615,6 +616,8 @@ async function streamAsk(query, mode, filters) {
           if (!answer) {
             msg.innerHTML = `<span class="chat-status"><span class="typing"><i></i><i></i><i></i></span>Formuliere Antwort…</span>`;
           }
+        } else if (event.type === "quotes") {
+          quoteChecks = event.quotes || [];
         } else if (event.type === "delta") {
           answer += event.text;
           msg.classList.add("is-streaming");
@@ -637,6 +640,10 @@ async function streamAsk(query, mode, filters) {
     return;
   }
   msg.innerHTML = answer ? renderMarkdown(answer) : "";
+  if (quoteChecks.length) {
+    markQuotes(msg, quoteChecks);
+    msg.appendChild(quoteSummary(quoteChecks));
+  }
   const note = aborted ? "Antwort abgebrochen." : failed ? `Verbindung unterbrochen: ${failed.message}` : "";
   const actions = document.createElement("div");
   actions.className = "msg-actions";
@@ -658,6 +665,75 @@ async function streamAsk(query, mode, filters) {
     state.chatHistory.push({ role: "user", content: query });
     state.chatHistory.push({ role: "assistant", content: answer });
   }
+}
+
+/* ---------------------------------------------------------------- quote checks */
+
+const QUOTE_STATUS = {
+  verified: { cls: "is-verified", mark: "✓", label: "wörtlich im Quelltext gefunden" },
+  deviates: { cls: "is-deviates", mark: "≈", label: "weicht vom Quelltext ab" },
+  not_found: { cls: "is-missing", mark: "✗", label: "nicht im Quelltext gefunden" },
+};
+
+function quoteSource(q) {
+  if (!q.item_key) return "";
+  return `${plainTitle(q.title) || "Quelle"}${q.page ? `, S. ${q.page}` : ""}`;
+}
+
+// Marks each checked quote inside the rendered answer (when it sits in one text node).
+function markQuotes(root, checks) {
+  for (const q of checks) {
+    const status = QUOTE_STATUS[q.status];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const at = node.data.indexOf(q.quote);
+      if (at < 0 || node.parentElement.closest(".quote-check")) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + q.quote.length);
+      const span = document.createElement("span");
+      span.className = `quote-check ${status.cls}`;
+      span.title = `Zitat ${status.label}${quoteSource(q) ? ` – ${quoteSource(q)}` : ""}`;
+      range.surroundContents(span);
+      // badge after the closing quotation mark, so the mark never wraps onto its own line
+      let anchor = span;
+      const next = span.nextSibling;
+      if (next?.nodeType === Node.TEXT_NODE && /^[“”"«»‘’]/.test(next.data)) {
+        next.splitText(1);
+        anchor = next;
+      }
+      anchor.after(Object.assign(document.createElement("sup"), {
+        className: `quote-badge ${status.cls}`,
+        textContent: status.mark,
+        ariaLabel: status.label,
+      }));
+      break;
+    }
+  }
+}
+
+function quoteSummary(checks) {
+  const counts = { verified: 0, deviates: 0, not_found: 0 };
+  for (const q of checks) counts[q.status] += 1;
+  const allGood = counts.verified === checks.length;
+  const box = document.createElement("details");
+  box.className = `quote-summary ${allGood ? "is-verified" : counts.not_found ? "is-missing" : "is-deviates"}`;
+  box.open = !allGood;
+  const parts = [];
+  if (counts.verified) parts.push(`${counts.verified} wörtlich belegt`);
+  if (counts.deviates) parts.push(`${counts.deviates} abweichend`);
+  if (counts.not_found) parts.push(`${counts.not_found} nicht gefunden`);
+  box.innerHTML = `
+    <summary>Zitatprüfung: ${parts.join(" · ")}</summary>
+    <ul>${checks.map((q) => {
+      const status = QUOTE_STATUS[q.status];
+      const text = q.quote.length > 110 ? `${q.quote.slice(0, 107)}…` : q.quote;
+      return `<li><span class="quote-badge ${status.cls}" aria-label="${status.label}">${status.mark}</span>
+        „${escapeHtml(text)}"<span class="quote-src">${escapeHtml(quoteSource(q) || status.label)}</span></li>`;
+    }).join("")}</ul>
+    ${counts.not_found ? '<p class="quote-hint">Nicht gefundene Zitate vor dem Übernehmen unbedingt im PDF prüfen.</p>' : ""}`;
+  return box;
 }
 
 $("#newChatBtn").addEventListener("click", () => {

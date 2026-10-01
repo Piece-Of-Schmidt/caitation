@@ -18,6 +18,7 @@ from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from backend.duplicates import dedupe_results
 from backend.indexer import COLLECTION_NAME, get_embedding_model
+from backend.verification import verify_quotes
 from backend.zotero_reader import ZoteroItem, read_items
 
 _reranker: CrossEncoder | None = None
@@ -500,9 +501,10 @@ def _prepare_ask(
     filters: dict | None,
     history: list[dict] | None,
     mode: str,
-) -> tuple[list[dict] | None, list[dict], str]:
+) -> tuple[list[dict] | None, list[dict], str, list[dict]]:
     """Shared retrieval + prompt assembly for ask/ask_stream.
-    Returns (messages, hits, system_prompt); messages is None if there were no hits."""
+    Returns (messages, hits, system_prompt, excerpts); messages is None if there were no
+    hits. excerpts are the source texts Claude saw, for checking its quotes afterwards."""
     # Retrieve using the question plus a bit of prior conversation, so follow-up
     # questions like "und was sagt Studie X dazu?" still find the right chunks.
     retrieval_query = query
@@ -513,17 +515,19 @@ def _prepare_ask(
 
     hits = search(retrieval_query, top_k=top_k, filters=filters)
     if not hits:
-        return None, [], ""
+        return None, [], "", []
 
     info = get_item_info()
-    context_blocks = []
+    context_blocks, excerpts = [], []
     for h in hits:
         item = info.get(h["item_key"])
         reference = _apa_reference(item) if item else f"{h['authors']} - {h['title']}"
         marker = " [vom Nutzer markiert]" if h.get("chunk_type") == "annotation" else ""
+        excerpt = h.pop("_context")
+        excerpts.append({"item_key": h["item_key"], "title": h["title"], "page": h["page"], "text": excerpt})
         context_blocks.append(
             f"Referenz (APA): {reference}\n"
-            f"Auszug (Seite {h['page']}){marker}: {h.pop('_context')}"
+            f"Auszug (Seite {h['page']}){marker}: {excerpt}"
         )
     context = "\n\n---\n\n".join(context_blocks)
 
@@ -540,7 +544,7 @@ def _prepare_ask(
         if m.get("role") in ("user", "assistant") and m.get("content")
     ]
     messages.append({"role": "user", "content": user_content})
-    return messages, hits, system_prompt
+    return messages, hits, system_prompt, excerpts
 
 
 _NO_KEY_MSG = (
@@ -560,7 +564,7 @@ def ask(
     if not config.ANTHROPIC_API_KEY:
         return {"answer": _NO_KEY_MSG, "sources": []}
 
-    messages, hits, system_prompt = _prepare_ask(query, top_k, filters, history, mode)
+    messages, hits, system_prompt, excerpts = _prepare_ask(query, top_k, filters, history, mode)
     if messages is None:
         return {"answer": _NO_HITS_MSG, "sources": []}
 
@@ -573,7 +577,7 @@ def ask(
     answer_text = "".join(
         block.text for block in message.content if block.type == "text"
     )
-    return {"answer": answer_text, "sources": hits}
+    return {"answer": answer_text, "sources": hits, "quotes": verify_quotes(answer_text, excerpts)}
 
 
 def ask_stream(
@@ -590,7 +594,7 @@ def ask_stream(
         yield {"type": "done"}
         return
 
-    messages, hits, system_prompt = _prepare_ask(query, top_k, filters, history, mode)
+    messages, hits, system_prompt, excerpts = _prepare_ask(query, top_k, filters, history, mode)
     yield {"type": "sources", "sources": hits}
     if messages is None:
         yield {"type": "delta", "text": _NO_HITS_MSG}
@@ -603,6 +607,9 @@ def ask_stream(
         system=system_prompt,
         messages=messages,
     ) as stream:
+        parts = []
         for text in stream.text_stream:
+            parts.append(text)
             yield {"type": "delta", "text": text}
+    yield {"type": "quotes", "quotes": verify_quotes("".join(parts), excerpts)}
     yield {"type": "done"}

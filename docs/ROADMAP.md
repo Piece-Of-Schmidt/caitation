@@ -36,12 +36,12 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 
 ## 3. Lücken bei fremden Bibliotheken
 
-- [ ] **Verlinkte Dateien** (z.B. aus ZotFile-Zeiten, Pfad nicht im Zotero-Speicher)
-      werden bisher ignoriert, ebenso EPUBs und gespeicherte Webseiten.
-- [ ] **Gruppenbibliotheken** werden mit der eigenen Bibliothek vermischt; der Link
-      „In Zotero" funktioniert für Gruppeneinträge nicht (`zotero://select/groups/…`).
-- [ ] **macOS und Linux.** Die automatische Erkennung des Zotero-Ordners liest bisher nur
-      das Windows-Profil (`%APPDATA%`).
+- [x] **Verlinkte Dateien** (absolut und relativ zum Zotero-Basisverzeichnis), **EPUBs,
+      gespeicherte Webseiten und Textdateien** werden indexiert (2026-10-01).
+- [x] **Gruppenbibliotheken:** eigene Schlüssel, korrekte Zotero-Links, Filter
+      „Bibliothek" (2026-10-01). Noch ungetestet mit einer echten Gruppe.
+- [x] **macOS und Linux:** Zotero-Profil wird an allen drei Orten gesucht (2026-10-01).
+      Noch ungetestet auf einem echten Mac.
 - [ ] **Erste Indexierung beschleunigen.** Rund 9 Stunden für 1000 Paper auf einer
       Büro-CPU. Suche sollte nach Minuten nutzbar sein: Metadaten zuerst, PDFs im
       Hintergrund; ehrliche Zeitschätzung; GPU bzw. Apple Silicon nutzen, wenn vorhanden.
@@ -51,10 +51,10 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 
 ## 4. Verlässlichkeit der Belege
 
-- [ ] **Automatische Zitatprüfung im Beleg- und Frage-Modus.** Jedes wörtliche Zitat
-      wird gegen den PDF-Text geprüft (inkl. Seitenzahl) und sichtbar als „geprüft"
-      oder „nicht gefunden" markiert. Ein erfundenes Zitat in einer Arbeit wäre für
-      Nutzer:innen ein ernstes Problem.
+- [x] **Automatische Zitatprüfung im Beleg- und Frage-Modus** (2026-10-01): jedes
+      wörtliche Zitat wird als „wörtlich belegt", „abweichend" oder „nicht gefunden"
+      markiert, mit Quelle und Seite (`backend/verification.py`).
+- [ ] Zitatprüfung: zitierte Seitenzahl (z.B. „S. 4") mit der Fundstelle abgleichen.
 - [ ] **Testsammlung** mit ~50 Fragen und den jeweils erwarteten Papern, damit sich
       Änderungen am Ranking messen lassen statt nur stichprobenartig ansehen.
 

@@ -124,6 +124,11 @@ Offene Punkte und geplante Schritte stehen in [docs/ROADMAP.md](docs/ROADMAP.md)
 - **Deine Highlights**: PDF-Annotationen aus dem Zotero-Reader werden mitindexiert und in
   der Suche bevorzugt (grüner Badge); Checkbox "nur meine Highlights" schränkt die Suche
   auf markierte Stellen ein. Im Frage-Modus zitiert Claude deine Highlights bevorzugt.
+- **Zitatprüfung**: Im Frage- und Beleg-Modus wird jedes wörtliche Zitat gegen die
+  Quelltexte geprüft und markiert: ✓ wörtlich belegt, ≈ abweichend, ✗ nicht gefunden
+  (mit Quelle und Seite). Nicht gefundene Zitate vor dem Übernehmen im PDF prüfen.
+- **Nicht nur PDFs**: Auch gespeicherte Webseiten, EPUBs, Textdateien, verlinkte Dateien
+  und Gruppenbibliotheken werden durchsucht.
 - **Beleg finden**: dritter Modus — Behauptung einfügen, das Tool prüft pro Quelle, ob sie
   die Behauptung stützt oder ihr widerspricht (mit wörtlichem Zitat und APA-Beleg).
 - **Streaming & Markdown**: Antworten erscheinen live beim Generieren und formatiert; mit
