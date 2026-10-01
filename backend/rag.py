@@ -464,7 +464,7 @@ aus mehreren Papers mit vollständigen bibliografischen Angaben. Antworte auf De
 
 Zitierregeln:
 - Belege jede inhaltliche Aussage mit einem In-Text-Zitat im APA-Stil inkl. Seitenzahl, \
-z.B. (Armantier et al., 2016, S. 12).
+z.B. (Armantier et al., 2016, S. 12). Hat ein Auszug keine Seitenzahl (Abstract, Webseite), lass die Seitenangabe weg, z.B. (Armantier et al., 2016) – niemals "S. 0".
 - Auszüge, die als "vom Nutzer markiert" gekennzeichnet sind, stammen aus persönlichen \
 Highlights des Nutzers — zitiere sie bevorzugt, wenn sie zur Frage passen.
 - Schließe die Antwort mit einem Abschnitt "Literatur" ab, der die tatsächlich zitierten \
@@ -476,7 +476,7 @@ Behauptung durch die Literatur des Nutzers gedeckt ist. Du bekommst eine Behaupt
 mehreren Papers mit vollständigen bibliografischen Angaben. Antworte auf Deutsch.
 
 Gehe jede Quelle einzeln durch und ordne sie ein:
-- **Stützt die Behauptung** — mit wörtlichem Zitat aus dem Auszug und In-Text-Zitat im APA-Stil inkl. Seitenzahl
+- **Stützt die Behauptung** — mit wörtlichem Zitat aus dem Auszug und In-Text-Zitat im APA-Stil inkl. Seitenzahl (nur wenn der Auszug eine hat; niemals "S. 0")
 - **Widerspricht der Behauptung** — ebenso mit Beleg
 - Quellen, die zur Behauptung nichts beitragen, lässt du komplett weg.
 
@@ -493,6 +493,15 @@ Struktur der Antwort:
 
 Sei streng: ein Auszug stützt eine Behauptung nur, wenn er sie wirklich inhaltlich trägt, \
 nicht wenn er bloß dasselbe Thema behandelt."""
+
+
+def _excerpt_location(hit: dict) -> str:
+    """Where an excerpt comes from, as told to Claude; "Seite 0" made it cite "S. 0"."""
+    if hit.get("page"):
+        return f"Seite {hit['page']}"
+    if hit.get("chunk_type") == "metadata":
+        return "Titel/Abstract, keine Seitenzahl"
+    return "ohne Seitenzahl"
 
 
 def _prepare_ask(
@@ -527,7 +536,7 @@ def _prepare_ask(
         excerpts.append({"item_key": h["item_key"], "title": h["title"], "page": h["page"], "text": excerpt})
         context_blocks.append(
             f"Referenz (APA): {reference}\n"
-            f"Auszug (Seite {h['page']}){marker}: {excerpt}"
+            f"Auszug ({_excerpt_location(h)}){marker}: {excerpt}"
         )
     context = "\n\n---\n\n".join(context_blocks)
 

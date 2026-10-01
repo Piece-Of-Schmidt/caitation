@@ -29,3 +29,11 @@ def test_excerpt_starts_at_next_sentence_instead_of_mid_word():
 
 def test_excerpt_keeps_text_that_already_starts_cleanly():
     assert _chunk_excerpt({"text": "Complete sentence."}) == "Complete sentence."
+
+
+def test_excerpts_without_page_are_not_labelled_page_zero():
+    from backend.rag import _excerpt_location
+
+    assert _excerpt_location({"page": 4, "chunk_type": "pdf"}) == "Seite 4"
+    assert "Seite" not in _excerpt_location({"page": 0, "chunk_type": "metadata"})
+    assert "Seite" not in _excerpt_location({"page": 0, "chunk_type": "document"})
