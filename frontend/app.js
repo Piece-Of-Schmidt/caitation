@@ -1339,7 +1339,7 @@ async function pollStatus() {
     const eta = remainingTime(s.eta_seconds);
     const text = s.total
       ? `${phase} ${numberFmt.format(s.done)} / ${numberFmt.format(s.total)}${eta ? ` · ${eta}` : ""}`
-      : "Lese Bibliothek…";
+      : (s.current || "Lese Bibliothek…").replace(/\.\.\.$/, "…");
     const device = DEVICE_LABELS[s.device] || s.device;
     setPill("indexing", text, [s.current, device && `Rechnet auf: ${device}`].filter(Boolean).join("\n"));
     els.progress.hidden = !s.total;

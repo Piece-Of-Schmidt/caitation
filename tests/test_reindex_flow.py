@@ -92,3 +92,28 @@ def test_interrupted_run_is_resumed_on_next_start(library, monkeypatch):
 def test_completed_run_clears_the_resume_marker(library):
     indexer.run_reindex()
     assert not indexer.reindex_incomplete()
+
+
+def test_old_index_is_repaired_in_place(library):
+    import chromadb
+
+    indexer.run_reindex()
+    collection = chromadb.PersistentClient(path=str(config.CHROMA_DIR)).get_collection(indexer.COLLECTION_NAME)
+    # as written by older versions: soft hyphens, and a garbled text layer
+    collection.update(ids=["BBBB2222_meta"], documents=["Monetary pol\xadicy in the me￾dia"],
+                      embeddings=[[1.0] + [0.0] * 7])
+    collection.add(ids=["AAAA1111_pdf_X_0"], documents=["\x17\x8a\x87\x03 \x92\x83\x92\x87\x94\x03 " * 20],
+                   metadatas=[{**indexer._chunk_metadata(library[0], "pdf", 1)}], embeddings=[[0.0, 1.0] + [0.0] * 6])
+    indexer._text_version_file().unlink()
+    assert indexer.needs_text_repair()
+
+    indexer.run_reindex()
+
+    got = collection.get(ids=["BBBB2222_meta"], include=["documents", "embeddings"])
+    assert got["documents"] == ["Monetary policy in the media"]
+    assert list(got["embeddings"][0]) == [1.0] + [0.0] * 7  # kept, not recomputed
+    assert collection.get(ids=["AAAA1111_pdf_X_0"])["ids"] == []  # item re-extracted
+    con = sqlite3.connect(config.FTS_DB)
+    assert con.execute("select count(*) from chunks where chunks match 'text:policy'").fetchone()[0] == 1
+    con.close()
+    assert not indexer.needs_text_repair()

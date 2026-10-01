@@ -18,6 +18,7 @@ import sqlite3
 import unicodedata
 
 from backend import config
+from backend.textclean import clean_text
 
 # „…“ „…" “…” "…" »…« ‚…‘ (German, English and guillemet quotes)
 _QUOTE = re.compile(r'„([^“”"\n]+)[“”"]|“([^”\n]+)”|"([^"\n]+)"|»([^«\n]+)«|‚([^‘’\n]+)[‘’]')
@@ -48,7 +49,7 @@ def language(text: str) -> str | None:
 
 def normalize(text: str) -> str:
     text = unicodedata.normalize("NFKC", text)  # ligatures (ﬁ -> fi), full-width forms
-    text = text.replace("­", "")  # soft hyphen
+    text = clean_text(text)  # soft hyphens, PDF control codes
     text = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)  # hyphenation across lines
     text = re.sub(r"[‐‑‒–—―]", "-", text)
     text = re.sub(r"[„“”«»‚‘’\"']", "", text)

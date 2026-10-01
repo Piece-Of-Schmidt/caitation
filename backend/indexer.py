@@ -19,6 +19,7 @@ import pypdfium2 as pdfium
 from sentence_transformers import SentenceTransformer
 
 from backend.documents import extract_sections
+from backend.textclean import clean_text, looks_garbled
 from backend.zotero_reader import ZoteroItem, read_items, snapshot_database
 
 COLLECTION_NAME = "zotero_library"
@@ -93,6 +94,53 @@ def reindex_incomplete() -> bool:
     """True if the last reindex was interrupted (window closed, crash): the server then
     resumes it on its next start even if Zotero itself has not changed since."""
     return _incomplete_marker().exists()
+
+
+# Bumped when indexed text gets cleaned differently; older indexes are repaired in place
+# (see repair_text) instead of a full re-extraction that would take hours.
+TEXT_VERSION = 1
+
+
+def _text_version_file() -> Path:
+    return config.STATE_FILE.with_suffix(".textversion")
+
+
+def needs_text_repair() -> bool:
+    if not config.STATE_FILE.exists():
+        return False  # nothing indexed yet
+    try:
+        return int(_text_version_file().read_text()) < TEXT_VERSION
+    except (OSError, ValueError):
+        return True
+
+
+def repair_text(collection, state: dict) -> None:
+    """Cleans the stored text of existing chunks (keeping their embeddings) and queues
+    items whose PDF text layer is unreadable for re-extraction with OCR."""
+    total = collection.count()
+    garbled_items = set()
+    offset, batch = 0, 2000
+    while True:
+        _progress.update(current=f"Bereinige gespeicherte Texte (einmalig): {offset:,} / {total:,}".replace(",", "."))
+        got = collection.get(include=["documents", "metadatas", "embeddings"], limit=batch, offset=offset)
+        if not got["ids"]:
+            break
+        changed = [i for i, doc in enumerate(got["documents"]) if clean_text(doc) != doc]
+        for i in changed:
+            if got["metadatas"][i].get("chunk_type") == "pdf" and looks_garbled(got["documents"][i]):
+                garbled_items.add(got["metadatas"][i]["item_key"])
+        if changed:
+            collection.update(
+                ids=[got["ids"][i] for i in changed],
+                documents=[clean_text(got["documents"][i]) for i in changed],
+                embeddings=[got["embeddings"][i] for i in changed],
+            )
+        offset += batch
+    for key in garbled_items:
+        state.pop(key, None)  # -> treated as new by this run: re-extracted, OCR where needed
+    _save_state(state)
+    rebuild_fts(collection)
+    _text_version_file().write_text(str(TEXT_VERSION))
 
 
 def _load_state() -> dict:
@@ -196,17 +244,17 @@ def _ocr_page(page) -> str:
     return "\n".join(line[1] for line in result)
 
 
-# PDFium reports line ends as \r\n and leaks a few control characters from some fonts
-_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
-
-
-def _page_text(page) -> str:
+def _raw_page_text(page) -> str:
     textpage = page.get_textpage()
     try:
         text = textpage.get_text_range()
     finally:
         textpage.close()
-    return _CONTROL_CHARS.sub("", text.replace("\r\n", "\n").replace("\r", "\n"))
+    return text.replace("\r\n", "\n").replace("\r", "\n")  # PDFium reports CRLF line ends
+
+
+def _page_text(page) -> str:
+    return clean_text(_raw_page_text(page))
 
 
 def _extract_pdf_pages(pdf_path: Path) -> list[str]:
@@ -216,14 +264,18 @@ def _extract_pdf_pages(pdf_path: Path) -> list[str]:
         return []
     try:
         pages = [pdf[i] for i in range(len(pdf))]
-        texts = [_page_text(page) for page in pages]
+        raw = [_raw_page_text(page) for page in pages]
+        texts = [clean_text(t) for t in raw]
 
-        # scanned PDF (no text layer) -> OCR as fallback
         if texts and sum(len(t) for t in texts) / len(texts) < 50:
+            ocr_pages = range(len(pages))  # scanned PDF (no text layer)
+        else:
+            ocr_pages = [i for i, t in enumerate(raw) if looks_garbled(t)]
+        for i in ocr_pages:
             try:
-                texts = [_ocr_page(page) for page in pages]
+                texts[i] = _ocr_page(pages[i])
             except Exception:
-                pass  # keep whatever the text layer gave us
+                break  # keep whatever the text layer gave us
         for page in pages:
             page.close()
         return texts
@@ -479,6 +531,8 @@ def run_reindex() -> None:
         COLLECTION_NAME, metadata={"hnsw:space": "cosine"}
     )
     _ensure_fts(collection)
+    if needs_text_repair():
+        repair_text(collection, state)
 
     fts_changes: dict[str, tuple | None] = {}
     # Items embedded by an earlier run that was interrupted before its keyword-index
@@ -539,6 +593,7 @@ def run_reindex() -> None:
 
     _flush_fts(fts_changes, state)
     _incomplete_marker().unlink(missing_ok=True)
+    _text_version_file().write_text(str(TEXT_VERSION))
     _progress.update(status="done", phase="", done=len(todo), current="Fertig")
 
 

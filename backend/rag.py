@@ -18,6 +18,7 @@ from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from backend.duplicates import dedupe_results
 from backend.indexer import COLLECTION_NAME, get_embedding_model
+from backend.textclean import clean_text
 from backend.verification import verify_quotes
 from backend.zotero_reader import ZoteroItem, read_items
 
@@ -182,7 +183,6 @@ def _fts_search(query: str, limit: int, annotations_only: bool = False) -> list[
 
 _LONE_SURROGATE = re.compile(r"[\ud800-\udfff]")
 _SENTENCE_START = re.compile(r"[.!?]\s+[A-ZÄÖÜ]")
-_SOFT_HYPHEN = re.compile(r"­\s*")  # invisible hyphenation hint, often plus a line break
 _LINE_HYPHEN = re.compile(r"(\w)- (?!(?:und|oder|bzw|sowie|als|and|or)\b)([a-zäöüß])")
 
 
@@ -207,7 +207,7 @@ def _clip(text: str, limit: int) -> str:
     """Normalizes PDF line breaks, rejoins words hyphenated across lines ("Risikoauf-
     schläge"; keeps "Wirtschafts- und …"), and shortens at a word boundary."""
     text = _LONE_SURROGATE.sub("", text)  # broken PDF glyphs would render as �
-    text = _SOFT_HYPHEN.sub("", text)
+    text = clean_text(text)  # soft hyphens, control codes (older indexes still have them)
     text = _LINE_HYPHEN.sub(r"\1\2", " ".join(text.split()))
     if len(text) <= limit:
         return text

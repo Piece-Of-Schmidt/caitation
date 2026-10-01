@@ -48,7 +48,7 @@ def _start_reindex() -> bool:
 
 
 def _snapshot_stale() -> bool:
-    if indexer.reindex_incomplete():
+    if indexer.reindex_incomplete() or indexer.needs_text_repair():
         return True
     try:
         zotero_mtime = config.ZOTERO_SQLITE.stat().st_mtime
