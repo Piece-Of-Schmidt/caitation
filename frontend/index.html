@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Caitation</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23256abf'/%3E%3Cpath d='M10 9h9a4 4 0 0 1 4 4v10H14a4 4 0 0 1-4-4z' fill='none' stroke='white' stroke-width='2.2'/%3E%3Cpath d='M14 14h5M14 18h5' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 5h16M7 12h10M10 19h4"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.7-4.3L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.7 4.3L20 16"/><path d="M20 20v-4h-4"/></symbol>
+  <symbol id="i-zotero" viewBox="0 0 24 24"><path d="M5 4h14l-11 16h11"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></symbol>
+  <symbol id="i-network" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="10" cy="18" r="2.5"/><path d="M8.3 7.1l7.4.7M7.2 8.2l1.8 7.6M16.3 10l-4.5 6.2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-highlight" viewBox="0 0 24 24"><path d="M9 11l-5 5v4h4l5-5"/><path d="M13 7l4 4 3-3-4-4z"/><path d="M9 11l4-4 4 4-4 4z"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#search" aria-label="Caitation – zur Suche">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><path d="M10 9h9a4 4 0 0 1 4 4v10H14a4 4 0 0 1-4-4z"/><path d="M14 14h5M14 18h5"/></svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">Caitation</span>
+        <span class="brand-sub">Deine Zotero-Bibliothek, durchsuchbar</span>
+      </span>
+    </a>
+
+    <nav class="nav" aria-label="Bereiche">
+      <a href="#search" data-view="search">Suche</a>
+      <a href="#dashboard" data-view="dashboard">Dashboard</a>
+      <a href="#duplicates" data-view="duplicates">Dubletten</a>
+    </nav>
+
+    <div class="index-status">
+      <span id="indexStatus" class="status-pill" data-state="loading">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="status-text">Verbinde…</span>
+      </span>
+      <button id="reindexBtn" class="icon-btn" type="button" title="Bibliothek neu indexieren" aria-label="Bibliothek neu indexieren">
+        <svg class="icon"><use href="#i-refresh"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="indexProgress" class="index-progress" hidden><div class="index-progress-bar"></div></div>
+</header>
+
+<main>
+  <!-- ============================== SEARCH ============================== -->
+  <section id="view-search" class="view">
+    <form id="searchForm" class="search-panel" autocomplete="off">
+      <div class="mode-switch" role="radiogroup" aria-label="Modus">
+        <label class="mode-option">
+          <input type="radio" name="mode" value="search" checked />
+          <span><svg class="icon"><use href="#i-search"/></svg>Suchen</span>
+        </label>
+        <label class="mode-option">
+          <input type="radio" name="mode" value="ask" />
+          <span><svg class="icon"><use href="#i-chat"/></svg>Frage stellen</span>
+        </label>
+        <label class="mode-option">
+          <input type="radio" name="mode" value="evidence" />
+          <span><svg class="icon"><use href="#i-check"/></svg>Beleg prüfen</span>
+        </label>
+      </div>
+
+      <div class="search-row">
+        <div class="search-field">
+          <svg class="icon search-field-icon" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="queryInput" type="search" aria-label="Suchanfrage" placeholder="Wonach suchst du?" autofocus />
+          <kbd class="search-kbd" title="Suchfeld fokussieren">/</kbd>
+        </div>
+        <button type="button" id="filterToggle" class="btn btn-secondary" aria-expanded="false" aria-controls="filterPanel">
+          <svg class="icon"><use href="#i-filter"/></svg>
+          <span>Filter</span>
+          <span id="filterCount" class="count-badge" hidden></span>
+        </button>
+        <button type="submit" id="submitBtn" class="btn btn-primary">Suchen</button>
+      </div>
+
+      <p id="modeHint" class="mode-hint"></p>
+
+      <div id="filterPanel" class="filter-panel" hidden>
+        <label class="field">
+          <span class="field-label">Jahr von</span>
+          <input type="number" id="yearFrom" min="1500" max="2100" inputmode="numeric" />
+        </label>
+        <label class="field">
+          <span class="field-label">Jahr bis</span>
+          <input type="number" id="yearTo" min="1500" max="2100" inputmode="numeric" />
+        </label>
+        <label class="field">
+          <span class="field-label">Typ</span>
+          <select id="itemType"><option value="">Alle Typen</option></select>
+        </label>
+        <label class="field">
+          <span class="field-label">Sammlung</span>
+          <select id="collectionSelect"><option value="">Alle Sammlungen</option></select>
+        </label>
+        <label class="field field-wide">
+          <span class="field-label">Tag</span>
+          <input type="text" id="tagInput" list="tagList" placeholder="Tag wählen…" />
+          <datalist id="tagList"></datalist>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="annotationsOnly" />
+          <span class="toggle-track" aria-hidden="true"></span>
+          <span>Nur meine Highlights</span>
+        </label>
+        <button type="button" id="clearFilters" class="btn btn-ghost">Zurücksetzen</button>
+      </div>
+    </form>
+
+    <section id="answerBox" class="conversation" hidden aria-live="polite">
+      <div class="conversation-head">
+        <h2>Gespräch</h2>
+        <button type="button" id="newChatBtn" class="btn btn-ghost btn-sm">
+          <svg class="icon"><use href="#i-plus"/></svg>Neues Gespräch
+        </button>
+      </div>
+      <div id="chatLog"></div>
+    </section>
+
+    <section id="results" aria-live="polite"></section>
+  </section>
+
+  <!-- ============================ DASHBOARD ============================= -->
+  <section id="view-dashboard" class="view" hidden></section>
+
+  <!-- ============================ DUPLICATES ============================ -->
+  <section id="view-duplicates" class="view" hidden></section>
+</main>
+
+<div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

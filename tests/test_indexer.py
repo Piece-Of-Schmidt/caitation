@@ -1,0 +1,105 @@
+import sqlite3
+
+import pytest
+
+from backend import config, indexer
+
+
+# ---------------------------------------------------------------- chunking
+
+
+def test_chunks_end_on_sentence_boundaries(monkeypatch):
+    monkeypatch.setattr(config, "CHUNK_SIZE_CHARS", 200)
+    monkeypatch.setattr(config, "CHUNK_OVERLAP_CHARS", 30)
+    sentence = "This is one complete sentence about inflation. "
+    chunks = indexer._chunk_pages([sentence * 6, sentence * 6])
+    assert len(chunks) > 2
+    for text, _page in chunks[:-1]:
+        assert text.endswith(".")
+
+
+def test_chunks_report_their_starting_page(monkeypatch):
+    monkeypatch.setattr(config, "CHUNK_SIZE_CHARS", 200)
+    monkeypatch.setattr(config, "CHUNK_OVERLAP_CHARS", 30)
+    chunks = indexer._chunk_pages(["a " * 150, "b " * 150])
+    assert chunks[0][1] == 1
+    assert chunks[-1][1] == 2
+
+
+# ---------------------------------------------------------------- change detection
+
+
+def test_item_hash_survives_moving_the_zotero_folder(tmp_path, monkeypatch, make_item):
+    def pdf_in(storage):
+        path = storage / "ATTACH01" / "paper.pdf"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"%PDF same content")
+        return path
+
+    old_storage, new_storage = tmp_path / "C" / "storage", tmp_path / "E" / "storage"
+    monkeypatch.setattr(config, "ZOTERO_STORAGE", old_storage)
+    before = indexer._item_hash(make_item(pdf_paths=[pdf_in(old_storage)]))
+    monkeypatch.setattr(config, "ZOTERO_STORAGE", new_storage)
+    after = indexer._item_hash(make_item(pdf_paths=[pdf_in(new_storage)]))
+    assert before == after
+
+
+def test_item_hash_changes_with_new_highlight(make_item):
+    plain = make_item()
+    highlighted = make_item(annotations=[{"text": "key finding", "comment": "", "page": 3}])
+    assert indexer._item_hash(plain) != indexer._item_hash(highlighted)
+
+
+def test_migration_carries_over_unchanged_items_only(monkeypatch, make_item):
+    unchanged_old, unchanged_new = make_item(key="SAME"), make_item(key="SAME")
+    edited_old, edited_new = make_item(key="EDIT", title="Old"), make_item(key="EDIT", title="New")
+    monkeypatch.setattr(indexer, "read_items", lambda _path: [unchanged_old, edited_old])
+    state = {"SAME": {"hash": "legacy"}, "EDIT": {"hash": "legacy"}}
+
+    carried = indexer._migrate_state(state, [unchanged_new, edited_new], config.DB_SNAPSHOT)
+
+    assert carried == 1
+    assert state["SAME"] == {"hash": indexer._item_hash(unchanged_new), "v": indexer.HASH_VERSION}
+    assert state["EDIT"] == {"hash": "legacy"}  # will be re-indexed
+
+
+# ---------------------------------------------------------------- keyword index
+
+
+@pytest.fixture
+def fts_db(tmp_path, monkeypatch):
+    path = tmp_path / "fts.sqlite"
+    monkeypatch.setattr(config, "FTS_DB", path)
+    con = sqlite3.connect(path)
+    con.execute(indexer._FTS_SCHEMA)
+    con.executemany(
+        "insert into chunks values (?,?,?,?,?,?,?,?,?)",
+        indexer._fts_rows(
+            ["A_0", "A_1", "B_0", "C_0"],
+            ["alpha one", "alpha two", "beta", "gamma"],
+            [_meta("A", 1), _meta("A", 2), _meta("B", 1), _meta("C", 1)],
+        ),
+    )
+    con.commit()
+    con.close()
+    return path
+
+
+def _meta(key, page):
+    return {"item_key": key, "title": f"T{key}", "authors": "X", "date": "2020",
+            "item_type": "journalArticle", "page": page, "chunk_type": "pdf"}
+
+
+def test_update_fts_replaces_deletes_and_adds(fts_db):
+    indexer.update_fts({
+        "A": (["A_0"], ["alpha new"], [_meta("A", 1)]),  # changed: 2 chunks -> 1
+        "B": None,  # removed from Zotero
+        "D": (["D_0"], ["delta"], [_meta("D", 1)]),  # new item
+    })
+    con = sqlite3.connect(fts_db)
+    rows = con.execute("select chunk_id, text from chunks order by chunk_id").fetchall()
+    found = con.execute("select chunk_id from chunks where chunks match 'delta'").fetchall()
+    con.execute("insert into chunks(chunks) values('integrity-check')")  # raises if corrupt
+    con.close()
+    assert rows == [("A_0", "alpha new"), ("C_0", "gamma"), ("D_0", "delta")]
+    assert found == [("D_0",)]

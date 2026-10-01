@@ -1,0 +1,120 @@
+# Caitation
+
+Durchsucht deine lokale Zotero-Bibliothek (Metadaten + PDF-Volltext) semantisch über eine
+kleine, lokal laufende Weboberfläche.
+
+- Embeddings + Vektorsuche laufen komplett lokal (kostenlos, `sentence-transformers` +
+  ChromaDB).
+- Nur die optionale Antwort-Synthese ("Frage beantworten"-Modus) nutzt die Claude-API
+  (Modell Haiku, sehr geringe Kosten pro Abfrage).
+
+## Einmaliges Setup
+
+Voraussetzung: Python 3.11 und Zotero 7. Rechne mit ~3 GB Arbeitsspeicher und mehreren GB
+Download (PyTorch und die Modelle) sowie ~2 GB Index pro 1000 Paper.
+
+1. Virtuelle Umgebung anlegen und Pakete installieren (PowerShell):
+   ```
+   python -m venv .venv
+   .venv\Scripts\python.exe -m pip install -r requirements.txt
+   ```
+2. `.env` anlegen (Kopie von `.env.example`) und deinen Anthropic-API-Key eintragen:
+   ```
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+   Einen Key bekommst du unter https://console.anthropic.com/ (nur nötig für den
+   "Frage beantworten"-Modus; reine Suche funktioniert auch ohne Key).
+
+   **Datenschutz:** Die Suche läuft komplett lokal. Im Frage- und im Beleg-Modus werden
+   Ausschnitte aus den passenden PDFs an die Claude-API (Anthropic) geschickt.
+
+Das Zotero-Datenverzeichnis wird automatisch aus den Zotero-Einstellungen gelesen (auch nach
+einem Umzug, z.B. auf ein anderes Laufwerk); ohne eigene Einstellung gilt
+`%USERPROFILE%\Zotero`. Mit `ZOTERO_DATA_DIR` in `.env` lässt es sich fest vorgeben.
+
+Das Embedding-Modell wird über `EMBEDDING_MODEL` in `.env` gewählt (aktuell
+`intfloat/multilingual-e5-base`). Jedes Modell bekommt ein eigenes Index-Verzeichnis unter
+`data/` — nach einem Modellwechsel einmal den Indexer laufen lassen, alte
+`chroma*`-Verzeichnisse nicht mehr genutzter Modelle können gelöscht werden.
+
+## Bibliothek indexieren
+
+Einmalig (und danach jederzeit erneut, wenn neue Paper hinzukommen — unveränderte Einträge
+werden übersprungen und nicht neu verarbeitet):
+
+```
+.venv\Scripts\python.exe -m backend.indexer
+```
+
+Bei ~1000 Einträgen mit PDF-Anhang dauert der erste vollständige Lauf auf einer normalen
+CPU einige Zeit (PDF-Textextraktion + Embedding). Folgeläufe sind deutlich schneller, da nur
+neue/geänderte Einträge verarbeitet werden (auch der Volltextindex wird dann nur für diese
+Einträge aktualisiert). Alternativ über den ↻-Button oben rechts in der Weboberfläche
+anstoßen.
+
+## Server starten
+
+```
+.venv\Scripts\python.exe -m uvicorn backend.main:app --reload
+```
+
+Danach im Browser öffnen: http://127.0.0.1:8000
+
+Beim Start lädt der Server die Modelle im Hintergrund vor (Statusanzeige oben rechts:
+„Modelle laden…" → „Bereit"), damit schon die erste Suche schnell ist.
+Tastenkürzel: `/` oder `Strg+K` springt ins Suchfeld.
+
+Der Server ist nur vom eigenen Rechner aus erreichbar und weist Anfragen anderer Websites
+ab (Schutz gegen Cross-Site-Anfragen und DNS-Rebinding, siehe `backend/security.py`).
+Öffne die Oberfläche deshalb über `127.0.0.1` oder `localhost`.
+
+## Entwicklung
+
+```
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.venv\Scripts\python.exe -m pytest
+```
+
+Offene Punkte und geplante Schritte stehen in [docs/ROADMAP.md](docs/ROADMAP.md).
+
+## Funktionen
+
+- **Hybrid-Suche**: semantische Vektorsuche + klassische Stichwortsuche (BM25 über SQLite
+  FTS5), zusammengeführt per Reciprocal Rank Fusion. Findet sowohl inhaltlich Ähnliches als
+  auch exakte Begriffe/Autorennamen ("FOMC", "Malmendier"). Vorläufige Treffer erscheinen
+  sofort, das präzise Ranking ersetzt sie wenige Sekunden später; Suchbegriffe werden in
+  den Fundstellen hervorgehoben.
+- **Filter**: Treffer nach Jahr, Item-Typ, Tag oder Zotero-Sammlung einschränken
+  (aufklappbares "Filter"-Panel unter dem Suchfeld).
+- **Direktlinks**: jeder Treffer verlinkt auf den Eintrag in Zotero (`zotero://select`) und
+  auf das PDF mit Sprung zur Fundstellen-Seite.
+- **Frage-Modus mit Chat**: Claude beantwortet Fragen anhand der Treffer mit APA-Zitaten
+  inkl. Seitenzahlen und Literaturverzeichnis; Folgefragen behalten den Gesprächskontext
+  ("Neues Gespräch" setzt zurück). Benötigt ANTHROPIC_API_KEY.
+- **Mehrere Fundstellen**: pro Paper sind bis zu 3 Fundstellen aufklappbar.
+- **Ähnliche Paper**: jeder Treffer verlinkt auf die semantisch ähnlichsten Einträge der
+  eigenen Bibliothek (praktisch für Literature Reviews).
+- **Auto-Reindex**: beim Serverstart wird geprüft, ob sich die Zotero-Bibliothek geändert
+  hat; wenn ja, läuft im Hintergrund ein inkrementeller Reindex.
+- **Dubletten**: der Bereich "Dubletten" listet Einträge mit gleicher DOI oder
+  gleichem Titel gruppiert auf (zum Zusammenführen in Zotero). In Suchergebnissen werden
+  Dubletten automatisch zusammengefasst und mit einem Badge markiert.
+- **Deine Highlights**: PDF-Annotationen aus dem Zotero-Reader werden mitindexiert und in
+  der Suche bevorzugt (grüner Badge); Checkbox "nur meine Highlights" schränkt die Suche
+  auf markierte Stellen ein. Im Frage-Modus zitiert Claude deine Highlights bevorzugt.
+- **Beleg finden**: dritter Modus — Behauptung einfügen, das Tool prüft pro Quelle, ob sie
+  die Behauptung stützt oder ihr widerspricht (mit wörtlichem Zitat und APA-Beleg).
+- **Streaming & Markdown**: Antworten erscheinen live beim Generieren und formatiert; mit
+  „Stopp" lässt sich eine laufende Antwort abbrechen.
+- **Export**: BibTeX-Download der Trefferliste oder einzelner Treffer, Kopieren-Button an
+  jeder Antwort.
+- **Reranker**: ein Cross-Encoder sortiert die Top-50-Kandidaten präzise um (kostet auf
+  dieser CPU 7–10 s, läuft aber hinter der Sofort-Vorschau; wiederholte Anfragen kommen aus
+  dem Cache; abschaltbar mit `RERANKER_MODEL=` in `.env`, größeres Modell dort wählbar).
+- **OCR**: gescannte PDFs ohne Textebene werden beim Indexieren automatisch per OCR
+  erfasst (rapidocr, lokal).
+- **Dashboard**: Kennzahlen, Einträge pro Jahr, Publikationstypen, Sammlungen, Top-Tags und
+  eine Themen-Landkarte der ganzen Bibliothek (Nähe = inhaltliche Ähnlichkeit, Farbe = von
+  Claude benanntes Themencluster; Legende hebt ein Thema hervor). Klick auf Tag, Sammlung
+  oder Typ setzt den passenden Suchfilter.
+- **Hell/Dunkel**: die Oberfläche folgt dem Farbschema des Systems.
