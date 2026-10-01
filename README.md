@@ -13,6 +13,13 @@ kleine, lokal laufende Weboberfläche.
 Voraussetzung: Python 3.11 und Zotero 7. Rechne mit ~3 GB Arbeitsspeicher und mehreren GB
 Download (PyTorch und die Modelle) sowie ~2 GB Index pro 1000 Paper.
 
+**Einfachster Weg:** `start.bat` (Windows) bzw. `start.command` (macOS/Linux)
+doppelklicken. Beim ersten Start richtet das Skript alles ein (dauert einige Minuten),
+danach startet es Caitation und öffnet den Browser. Den API-Key (Schritt 2) trägst du in
+die dann angelegte Datei `.env` ein.
+
+Von Hand:
+
 1. Virtuelle Umgebung anlegen und Pakete installieren (PowerShell):
    ```
    python -m venv .venv
@@ -89,6 +96,12 @@ Installation:
 Läuft Caitation nicht unter `http://127.0.0.1:8000`, lässt sich die Adresse im
 Konfigurationseditor von Zotero (*Einstellungen → Erweitert → Konfigurationseditor*) über
 `extensions.caitation.serverURL` ändern.
+
+## Wenn etwas nicht klappt
+
+Fehler und Laufzeiten werden in `data/caitation.log` protokolliert. Schick diese Datei
+mit, wenn du ein Problem meldest. Sie enthält keine PDF-Inhalte, aber den Anfang deiner
+Suchanfragen; sieh sie vor dem Verschicken kurz durch.
 
 ## Entwicklung
 

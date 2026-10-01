@@ -15,9 +15,11 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 - [x] Schutz des lokalen Servers gegen fremde Websites (Host-Prüfung gegen DNS-Rebinding,
       Herkunftsprüfung gegen Cross-Site-Anfragen)
 - [x] Automatische Tests für die Kernlogik (`pytest`)
-- [ ] Automatische Testläufe bei jeder Änderung (CI, z.B. GitHub Actions auf Windows + macOS)
-- [ ] Einfache Installation für Nicht-Programmierer:innen (Installer oder ein Startskript)
-- [ ] Fehlerprotokoll in eine Datei, damit Kolleg:innen bei Problemen etwas schicken können
+- [x] Automatische Testläufe (GitHub Actions auf Windows, macOS, Linux; `.github/workflows/tests.yml`),
+      laufen, sobald das Projekt auf GitHub liegt
+- [x] Startskripte `start.bat` / `start.command` (richten beim ersten Start alles ein)
+- [ ] Echter Installer ohne vorinstalliertes Python (z.B. mit einem Paketierwerkzeug)
+- [x] Fehlerprotokoll `data/caitation.log`; fehlgeschlagener Reindex wird in der Oberfläche angezeigt
 
 ## 2. Entscheidungen
 

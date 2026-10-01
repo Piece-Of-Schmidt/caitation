@@ -41,6 +41,10 @@ def get_progress() -> dict:
     return dict(_progress)
 
 
+def report_error(message: str) -> None:
+    _progress.update(status="error", current=message)
+
+
 def _load_state() -> dict:
     if config.STATE_FILE.exists():
         return json.loads(config.STATE_FILE.read_text(encoding="utf-8"))

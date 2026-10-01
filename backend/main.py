@@ -1,6 +1,8 @@
 import json
+import logging
 import threading
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.gzip import GZipMiddleware
@@ -11,6 +13,16 @@ from pydantic import BaseModel
 from backend import config, duplicates, indexer, rag
 from backend.bibtex import items_to_bibtex
 from backend.security import LocalOnlyMiddleware
+
+# Errors and timings also go to data/caitation.log, so colleagues can send it along
+# when something goes wrong (the console window is often closed by then).
+LOG_FILE = config.DATA_DIR / "caitation.log"
+log = logging.getLogger("uvicorn.error")
+if not any(isinstance(h, RotatingFileHandler) for h in log.handlers):
+    _file_handler = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+    _file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    log.addHandler(_file_handler)
+    log.setLevel(logging.INFO)
 
 _reindex_lock = threading.Lock()
 
@@ -24,6 +36,9 @@ def _start_reindex() -> bool:
     def _run():
         try:
             indexer.run_reindex()
+        except Exception as error:
+            log.exception("Reindex failed")
+            indexer.report_error(f"{type(error).__name__}: {error}")
         finally:
             _reindex_lock.release()
 
