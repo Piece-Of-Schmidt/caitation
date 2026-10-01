@@ -15,8 +15,7 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 - [x] Schutz des lokalen Servers gegen fremde Websites (Host-Prüfung gegen DNS-Rebinding,
       Herkunftsprüfung gegen Cross-Site-Anfragen)
 - [x] Automatische Tests für die Kernlogik (`pytest`)
-- [x] Automatische Testläufe (GitHub Actions auf Windows, macOS, Linux; `.github/workflows/tests.yml`),
-      laufen, sobald das Projekt auf GitHub liegt
+- [x] Automatische Testläufe (GitHub Actions auf Windows, macOS, Linux), grün seit 2026-10-01
 - [x] Startskripte `start.bat` / `start.command` (richten beim ersten Start alles ein)
 - [ ] Echter Installer ohne vorinstalliertes Python (z.B. mit einem Paketierwerkzeug)
 - [x] Fehlerprotokoll `data/caitation.log`; fehlgeschlagener Reindex wird in der Oberfläche angezeigt
@@ -28,10 +27,11 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
       Ligaturen und Akzente werden sogar sauberer ausgelesen.
 - [x] **Architektur: Zotero-Plugin + lokale Begleit-App** (2026-10-01). Das Plugin
       (`plugin/`, Zotero 8/9) ist die Oberfläche in Zotero; die Python-App rechnet lokal.
-- [ ] **Plugin in echtem Zotero testen** (bisher nur gebaut, Syntax und Paket geprüft).
-- [ ] **Update-Adresse des Plugins** zeigt auf ein noch nicht existierendes
-      GitHub-Repository (`Piece-Of-Schmidt/caitation`); beim Veröffentlichen anlegen und
-      `plugin/updates.json` bereitstellen. Plugin-ID: `caitation@piece-of-schmidt`.
+- [x] **Plugin in echtem Zotero getestet** (Zotero 9.0.6, 2026-10-01).
+- [x] **Veröffentlicht** (2026-10-01): github.com/Piece-Of-Schmidt/caitation, Release v0.1.0
+      mit Plugin-Datei; automatische Plugin-Updates über `plugin/updates.json`.
+      Neue Plugin-Version: Version in `plugin/src/manifest.json` erhöhen, `plugin/build.py`,
+      Release mit der `.xpi` anlegen und den Eintrag in `plugin/updates.json` ergänzen.
 - [ ] **Zugriff auf Zotero** über offizielle Schnittstellen (Plugin-API bzw. lokale API)
       statt die Datenbankdatei zu kopieren; Zotero rät von direktem Datenbankzugriff ab,
       weil sich das Schema ändern kann.
