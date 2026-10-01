@@ -23,7 +23,7 @@ from backend.zotero_reader import ZoteroItem, read_items, snapshot_database
 
 COLLECTION_NAME = "zotero_library"
 
-_progress = {"total": 0, "done": 0, "current": "", "status": "idle"}
+_progress = {"total": 0, "done": 0, "current": "", "status": "idle", "phase": ""}
 
 _embedding_model: SentenceTransformer | None = None
 
@@ -332,8 +332,81 @@ def update_fts(changes: dict[str, tuple | None]) -> None:
         con.close()
 
 
+QUICK_BATCH_SIZE = 128  # chunks embedded per call in the quick phase
+FTS_FLUSH_EVERY = 25  # items; keeps keyword search growing during long full-text runs
+
+
+def _chunk_metadata(item: ZoteroItem, chunk_type: str, page: int) -> dict:
+    return {
+        "item_key": item.key,
+        "title": item.title,
+        "authors": item.authors_str,
+        "date": item.date,
+        "item_type": item.item_type,
+        "chunk_type": chunk_type,
+        "page": page,
+    }
+
+
+def _quick_chunks(item: ZoteroItem) -> tuple[list, list, list]:
+    """Title/abstract/tags/notes plus the user's highlights: cheap, no file access."""
+    ids = [f"{item.key}_meta"]
+    documents = [_metadata_text(item)]
+    metadatas = [_chunk_metadata(item, "metadata", 0)]
+    for ann_idx, ann in enumerate(item.annotations):
+        content = ann["text"]
+        if ann["comment"]:
+            content += f"\nKommentar: {ann['comment']}"
+        ids.append(f"{item.key}_ann_{ann_idx}")
+        documents.append(content)
+        metadatas.append(_chunk_metadata(item, "annotation", ann["page"]))
+    return ids, documents, metadatas
+
+
+def _fulltext_chunks(item: ZoteroItem) -> tuple[list, list, list]:
+    ids, documents, metadatas = [], [], []
+    sources = [("pdf", path, _extract_pdf_pages) for path in item.pdf_paths]
+    sources += [("doc", path, extract_sections) for path in item.documents]
+    for kind, path, extract in sources:
+        for chunk_idx, (chunk_text, page_num) in enumerate(_chunk_pages(extract(path))):
+            ids.append(f"{item.key}_{kind}_{_file_id(path)}_{chunk_idx}")
+            documents.append(chunk_text)
+            # web pages and EPUBs have no page numbers
+            metadatas.append(_chunk_metadata(item, "pdf" if kind == "pdf" else "document",
+                                             page_num if kind == "pdf" else 0))
+    return ids, documents, metadatas
+
+
+def _embed_and_add(collection, ids: list, documents: list, metadatas: list) -> None:
+    if not documents:
+        return
+    # model loaded lazily: a reindex where nothing changed never pays for it
+    embeddings = get_embedding_model().encode(
+        [f"passage: {d}" for d in documents],
+        show_progress_bar=False,
+        normalize_embeddings=True,
+    ).tolist()
+    collection.add(ids=ids, documents=documents, metadatas=metadatas, embeddings=embeddings)
+
+
+def _ensure_fts(collection) -> None:
+    if not config.FTS_DB.exists():
+        rebuild_fts(collection)
+
+
+def _flush_fts(fts_changes: dict, state: dict) -> None:
+    """Writes pending keyword-index changes and clears the matching fts_pending marks."""
+    if not fts_changes:
+        return
+    update_fts(fts_changes)
+    for key in fts_changes:
+        state.get(key, {}).pop("fts_pending", None)
+    _save_state(state)
+    fts_changes.clear()
+
+
 def run_reindex() -> None:
-    _progress.update(status="running", done=0, total=0, current="Lese Zotero-Bibliothek...")
+    _progress.update(status="running", phase="", done=0, total=0, current="Lese Zotero-Bibliothek...")
     state = _load_state()
     needs_migration = any(entry.get("v") != HASH_VERSION for entry in state.values())
     previous_snapshot = None
@@ -354,6 +427,7 @@ def run_reindex() -> None:
     collection = client.get_or_create_collection(
         COLLECTION_NAME, metadata={"hnsw:space": "cosine"}
     )
+    _ensure_fts(collection)
 
     fts_changes: dict[str, tuple | None] = {}
     # Items embedded by an earlier run that was interrupted before its keyword-index
@@ -364,96 +438,51 @@ def run_reindex() -> None:
             fts_changes[key] = (got["ids"], got["documents"], got["metadatas"])
 
     current_keys = {item.key for item in items}
-    removed_keys = set(state.keys()) - current_keys
-    for key in removed_keys:
+    for key in set(state.keys()) - current_keys:
         collection.delete(where={"item_key": key})
         del state[key]
         fts_changes[key] = None
 
-    _progress.update(total=len(items))
-
-    for idx, item in enumerate(items):
-        _progress.update(done=idx, current=item.title[:80])
+    todo = []
+    for item in items:
         new_hash = _item_hash(item)
-        if state.get(item.key, {}).get("hash") == new_hash:
-            continue
+        if state.get(item.key, {}).get("hash") != new_hash:
+            todo.append((item, new_hash))
 
+    # Phase 1: titles, abstracts, notes and highlights of every changed item, embedded in
+    # batches. On a first run this makes the whole library findable within minutes,
+    # while the slow full-text phase below can take hours.
+    _progress.update(phase="quick", total=len(todo), done=0, current="Titel, Abstracts und Highlights")
+    quick: dict[str, tuple[list, list, list]] = {}
+    batch = ([], [], [])
+    for idx, (item, _hash) in enumerate(todo):
         collection.delete(where={"item_key": item.key})
+        quick[item.key] = _quick_chunks(item)
+        for part, values in zip(batch, quick[item.key]):
+            part.extend(values)
+        if len(batch[0]) >= QUICK_BATCH_SIZE or idx == len(todo) - 1:
+            _embed_and_add(collection, *batch)
+            batch = ([], [], [])
+            _progress.update(done=idx + 1)
+    fts_changes.update(quick)
+    _flush_fts(fts_changes, state)
 
-        ids, documents, metadatas = [], [], []
-
-        ids.append(f"{item.key}_meta")
-        documents.append(_metadata_text(item))
-        metadatas.append(
-            {
-                "item_key": item.key,
-                "title": item.title,
-                "authors": item.authors_str,
-                "date": item.date,
-                "item_type": item.item_type,
-                "chunk_type": "metadata",
-                "page": 0,
-            }
-        )
-
-        for ann_idx, ann in enumerate(item.annotations):
-            content = ann["text"]
-            if ann["comment"]:
-                content += f"\nKommentar: {ann['comment']}"
-            ids.append(f"{item.key}_ann_{ann_idx}")
-            documents.append(content)
-            metadatas.append(
-                {
-                    "item_key": item.key,
-                    "title": item.title,
-                    "authors": item.authors_str,
-                    "date": item.date,
-                    "item_type": item.item_type,
-                    "chunk_type": "annotation",
-                    "page": ann["page"],
-                }
-            )
-
-        sources = [("pdf", path, _extract_pdf_pages) for path in item.pdf_paths]
-        sources += [("doc", path, extract_sections) for path in item.documents]
-        for kind, path, extract in sources:
-            for chunk_idx, (chunk_text, page_num) in enumerate(_chunk_pages(extract(path))):
-                ids.append(f"{item.key}_{kind}_{_file_id(path)}_{chunk_idx}")
-                documents.append(chunk_text)
-                metadatas.append(
-                    {
-                        "item_key": item.key,
-                        "title": item.title,
-                        "authors": item.authors_str,
-                        "date": item.date,
-                        "item_type": item.item_type,
-                        "chunk_type": "pdf" if kind == "pdf" else "document",
-                        "page": page_num if kind == "pdf" else 0,  # web pages have no pages
-                    }
-                )
-
-        if documents:
-            # loaded lazily: a reindex where nothing changed never pays for the model
-            embeddings = get_embedding_model().encode(
-                [f"passage: {d}" for d in documents],
-                show_progress_bar=False,
-                normalize_embeddings=True,
-            ).tolist()
-            collection.add(ids=ids, documents=documents, metadatas=metadatas, embeddings=embeddings)
-        fts_changes[item.key] = (ids, documents, metadatas)
-
+    # Phase 2: full texts (PDFs incl. OCR, web pages, EPUBs)
+    _progress.update(phase="fulltext", done=0)
+    for idx, (item, new_hash) in enumerate(todo):
+        _progress.update(done=idx, current=item.title[:80])
+        ids, documents, metadatas = _fulltext_chunks(item)
+        _embed_and_add(collection, ids, documents, metadatas)
+        q_ids, q_docs, q_metas = quick[item.key]
+        fts_changes[item.key] = (q_ids + ids, q_docs + documents, q_metas + metadatas)
         # fts_pending until the keyword index has this item (see the recovery above)
         state[item.key] = {"hash": new_hash, "v": HASH_VERSION, "fts_pending": True}
         _save_state(state)
+        if len(fts_changes) >= FTS_FLUSH_EVERY:
+            _flush_fts(fts_changes, state)
 
-    if not config.FTS_DB.exists():
-        rebuild_fts(collection)
-    elif fts_changes:
-        update_fts(fts_changes)
-    done = [entry.pop("fts_pending") for entry in state.values() if "fts_pending" in entry]
-    if done:
-        _save_state(state)
-    _progress.update(status="done", done=len(items), current="Fertig")
+    _flush_fts(fts_changes, state)
+    _progress.update(status="done", phase="", done=len(todo), current="Fertig")
 
 
 if __name__ == "__main__":

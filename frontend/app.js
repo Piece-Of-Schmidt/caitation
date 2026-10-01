@@ -1102,7 +1102,8 @@ async function pollStatus() {
   els.reindexBtn.classList.toggle("is-spinning", s.running);
 
   if (s.running) {
-    const text = s.total ? `Indexiere ${numberFmt.format(s.done)} / ${numberFmt.format(s.total)}` : "Lese Bibliothek…";
+    const phase = { quick: "Titel & Abstracts", fulltext: "Volltexte" }[s.phase] || "Indexiere";
+    const text = s.total ? `${phase} ${numberFmt.format(s.done)} / ${numberFmt.format(s.total)}` : "Lese Bibliothek…";
     setPill("indexing", text, s.current || text);
     els.progress.hidden = !s.total;
     if (s.total) els.progressBar.style.width = `${((s.done / s.total) * 100).toFixed(1)}%`;

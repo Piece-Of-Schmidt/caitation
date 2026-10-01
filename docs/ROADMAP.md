@@ -44,9 +44,11 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
       „Bibliothek" (2026-10-01). Noch ungetestet mit einer echten Gruppe.
 - [x] **macOS und Linux:** Zotero-Profil wird an allen drei Orten gesucht (2026-10-01).
       Noch ungetestet auf einem echten Mac.
-- [ ] **Erste Indexierung beschleunigen.** Rund 9 Stunden für 1000 Paper auf einer
-      Büro-CPU. Suche sollte nach Minuten nutzbar sein: Metadaten zuerst, PDFs im
-      Hintergrund; ehrliche Zeitschätzung; GPU bzw. Apple Silicon nutzen, wenn vorhanden.
+- [x] **Erste Indexierung zweiphasig** (2026-10-01): erst Titel, Abstracts, Notizen und
+      Highlights aller Einträge (Minuten), dann die Volltexte; die Stichwortsuche wird
+      alle 25 Einträge aktualisiert.
+- [ ] Erste Indexierung: ehrliche Zeitschätzung anzeigen; GPU bzw. Apple Silicon nutzen,
+      wenn vorhanden.
 - [ ] **Systemanforderungen dokumentieren** (~3 GB RAM, mehrere GB Download für Modelle
       und Pakete, ~2 GB Index pro 1000 Paper).
 - [ ] An weiteren Bibliotheken testen (andere Fächer, Sprachen, Größen).
