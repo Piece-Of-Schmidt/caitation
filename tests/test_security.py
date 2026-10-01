@@ -38,6 +38,16 @@ def test_rejects_foreign_requests(headers):
     assert rejection_reason(headers) is not None
 
 
+def test_zotero_plugin_header_is_allowed_from_privileged_context():
+    headers = {"host": "127.0.0.1:8000", "sec-fetch-site": "cross-site", "x-caitation-client": "zotero-plugin"}
+    assert rejection_reason(headers) is None
+
+
+def test_plugin_header_does_not_bypass_host_check():
+    headers = {"host": "evil.example:8000", "x-caitation-client": "zotero-plugin"}
+    assert rejection_reason(headers) is not None
+
+
 @pytest.fixture
 def client():
     app = Starlette(routes=[Route("/", lambda request: PlainTextResponse("ok"), methods=["GET", "POST"])])

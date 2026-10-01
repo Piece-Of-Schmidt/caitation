@@ -9,11 +9,17 @@ read search results and PDFs. Two checks close that:
   attacker's domain as Host).
 - Requests a browser marks as coming from another site are refused (Sec-Fetch-Site,
   Origin). Clients outside a browser (curl, scripts) send neither and stay allowed.
+
+The Zotero plugin identifies itself with the X-Caitation-Client header. A web page can
+only send a custom header after a CORS preflight, which this server never grants, so
+the header proves the request did not come from a website. (DNS rebinding could bypass
+that, which is why the Host check applies to every request.)
 """
 
 from starlette.responses import PlainTextResponse
 
 ALLOWED_HOSTNAMES = {"127.0.0.1", "localhost", "[::1]"}
+CLIENT_HEADER = "x-caitation-client"
 
 
 def _hostname(host: str) -> str:
@@ -27,6 +33,8 @@ def rejection_reason(headers: dict[str, str]) -> str | None:
     host = headers.get("host", "")
     if _hostname(host).lower() not in ALLOWED_HOSTNAMES:
         return "Caitation nimmt nur Anfragen über 127.0.0.1 oder localhost an."
+    if headers.get(CLIENT_HEADER):
+        return None
     fetch_site = headers.get("sec-fetch-site")
     if fetch_site and fetch_site not in ("same-origin", "none"):
         return "Anfragen von anderen Websites sind nicht erlaubt."

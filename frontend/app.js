@@ -499,18 +499,25 @@ els.results.addEventListener("click", async (e) => {
     return;
   }
   const related = e.target.closest("[data-related]");
-  if (!related) return;
+  if (related) showRelated(related.dataset.related, related.dataset.title);
+});
+
+async function showRelated(itemKey, title) {
   state.searchCtrl?.abort();
   const ctrl = (state.searchCtrl = new AbortController());
+  els.answerBox.hidden = true;
   renderSkeleton("Suche ähnliche Paper…");
   window.scrollTo({ top: 0, behavior: "smooth" });
   try {
-    const data = await api(`/api/related/${encodeURIComponent(related.dataset.related)}`, { signal: ctrl.signal });
-    renderResults(data.results, { title: `Ähnlich zu „${related.dataset.title}"`, back: Boolean(state.lastRender) });
+    const data = await api(`/api/related/${encodeURIComponent(itemKey)}`, { signal: ctrl.signal });
+    renderResults(data.results, {
+      title: title ? `Ähnlich zu „${title}"` : "Ähnliche Paper",
+      back: Boolean(state.lastRender),
+    });
   } catch (err) {
     if (!isAbort(err)) renderError(err);
   }
-});
+}
 
 /* ---------------------------------------------------------------- search flow */
 
@@ -1053,13 +1060,36 @@ document.addEventListener("keydown", (e) => {
 
 /* ================================================================ init */
 
+function setMode(mode) {
+  els.form.querySelector(`input[name="mode"][value="${mode}"]`).checked = true;
+  applyMode(mode);
+}
+
+// Links from the Zotero plugin: ?q=…&mode=search|ask|evidence or ?related=KEY&title=…
+function applyLaunchParams() {
+  const params = new URLSearchParams(location.search);
+  if (![...params.keys()].length) return false;
+  history.replaceState(null, "", `${location.pathname}#search`);
+  showView("search");
+  if (params.get("related")) {
+    showRelated(params.get("related"), params.get("title") || "");
+    return true;
+  }
+  const mode = params.get("mode");
+  if (MODES[mode]) setMode(mode);
+  const query = (params.get("q") || "").trim();
+  if (query) {
+    els.query.value = query;
+    els.form.requestSubmit();
+  }
+  return true;
+}
+
 (function init() {
   const savedMode = storage.get("caitation.mode");
-  if (savedMode && MODES[savedMode]) {
-    els.form.querySelector(`input[name="mode"][value="${savedMode}"]`).checked = true;
-  }
-  applyMode(currentMode());
-  showView(location.hash.slice(1) || "search");
+  if (savedMode && MODES[savedMode]) setMode(savedMode);
+  else applyMode(currentMode());
+  if (!applyLaunchParams()) showView(location.hash.slice(1) || "search");
   pollStatus();
   loadFilters();
 })();

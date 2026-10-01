@@ -1,0 +1,44 @@
+/* Item pane section "Similar papers (Caitation)". Uses Zotero's own theme variables
+   where available, so it fits light and dark mode. */
+
+.caitation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.caitation-row {
+  padding: 5px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.caitation-row:hover,
+.caitation-row:focus-visible {
+  background: var(--fill-quinary, rgba(128, 128, 128, 0.12));
+  outline: none;
+}
+
+.caitation-title {
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.caitation-meta,
+.caitation-hint {
+  font-size: 0.9em;
+  color: var(--fill-secondary, GrayText);
+}
+
+.caitation-message {
+  padding: 2px 0;
+}
+
+.caitation-button {
+  margin-top: 6px;
+  align-self: flex-start;
+}

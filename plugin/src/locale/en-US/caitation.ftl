@@ -1,0 +1,8 @@
+caitation-section-header =
+    .label = Similar papers (Caitation)
+caitation-section-sidenav =
+    .tooltiptext = Similar papers (Caitation)
+caitation-menu-open =
+    .label = Open Caitation
+caitation-menu-related =
+    .label = Find similar papers in Caitation
