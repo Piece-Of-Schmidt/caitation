@@ -50,13 +50,15 @@ def test_item_hash_changes_with_new_highlight(make_item):
     assert indexer._item_hash(plain) != indexer._item_hash(highlighted)
 
 
-def test_migration_carries_over_unchanged_items_only(monkeypatch, make_item):
+def test_migration_carries_over_unchanged_items_only(tmp_path, monkeypatch, make_item):
     unchanged_old, unchanged_new = make_item(key="SAME"), make_item(key="SAME")
     edited_old, edited_new = make_item(key="EDIT", title="Old"), make_item(key="EDIT", title="New")
     monkeypatch.setattr(indexer, "read_items", lambda _path: [unchanged_old, edited_old])
+    old_snapshot = tmp_path / "previous.sqlite"  # only has to exist; read_items is faked
+    old_snapshot.touch()
     state = {"SAME": {"hash": "legacy"}, "EDIT": {"hash": "legacy"}}
 
-    carried = indexer._migrate_state(state, [unchanged_new, edited_new], config.DB_SNAPSHOT)
+    carried = indexer._migrate_state(state, [unchanged_new, edited_new], old_snapshot)
 
     assert carried == 1
     assert state["SAME"] == {"hash": indexer._item_hash(unchanged_new), "v": indexer.HASH_VERSION}
