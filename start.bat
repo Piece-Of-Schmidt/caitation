@@ -4,6 +4,15 @@ rem Python ist nicht noetig. Python 3.11 und alle Pakete landen in den Unterordn
 rem und .venv dieses Ordners: Zum Deinstallieren genuegt es, den Ordner zu loeschen.
 setlocal
 cd /d "%~dp0"
+title Caitation
+
+rem Laeuft Caitation schon (z.B. zweiter Klick im Startmenue)? Dann nur den Browser oeffnen.
+if not defined CAITATION_SETUP_ONLY (
+    curl.exe -fs -o nul --max-time 2 http://127.0.0.1:8000/api/reindex/status >nul 2>&1 && (
+        start http://127.0.0.1:8000
+        exit /b 0
+    )
+)
 
 rem uv (github.com/astral-sh/uv) installiert Python und die Pakete; feste Version mit Pruefsumme.
 set "UV_VERSION=0.12.21"

@@ -5,3 +5,4 @@
 *.sh text eol=lf
 *.svg text
 *.xpi binary
+*.ico binary

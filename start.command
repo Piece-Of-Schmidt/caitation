@@ -4,6 +4,12 @@
 # und .venv dieses Ordners: Zum Deinstallieren genügt es, den Ordner zu löschen.
 cd "$(dirname "$0")" || exit 1
 
+# Läuft Caitation schon? Dann nur den Browser öffnen.
+if [ -z "$CAITATION_SETUP_ONLY" ] && curl -fs -o /dev/null --max-time 2 http://127.0.0.1:8000/api/reindex/status; then
+    open http://127.0.0.1:8000 2>/dev/null || xdg-open http://127.0.0.1:8000 2>/dev/null
+    exit 0
+fi
+
 # uv (github.com/astral-sh/uv) installiert Python und die Pakete; feste Version mit Prüfsumme.
 UV_VERSION=0.12.21
 UV="$PWD/.tools/uv"

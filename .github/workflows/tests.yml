@@ -37,3 +37,18 @@ jobs:
       - name: Frontend has no syntax errors
         if: runner.os == 'Linux'
         run: node --check frontend/app.js && node --check plugin/src/caitation.js
+      - name: Windows installer builds
+        if: runner.os == 'Windows'
+        run: |
+          version=$(python -c "import json; print(json.load(open('plugin/src/manifest.json'))['version'])")
+          iscc=$(command -v iscc || true)
+          [ -n "$iscc" ] || [ -x "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ] || choco install innosetup -y --no-progress
+          [ -n "$iscc" ] || iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          "$iscc" //Qp //DAppVersion=$version installer/caitation.iss
+      - name: Upload installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer
+          path: dist/Caitation-Setup-*.exe
+          retention-days: 7
