@@ -105,5 +105,6 @@ function InitializeUninstall(): Boolean;
 begin
   Result := True;
   while Result and CaitationRunning() do
-    Result := MsgBox(ExpandConstant('{cm:CloseFirst}'), mbError, MB_RETRYCANCEL) = IDRETRY;
+    { silent uninstall (/SUPPRESSMSGBOXES): cancel instead of retrying forever }
+    Result := SuppressibleMsgBox(ExpandConstant('{cm:CloseFirst}'), mbError, MB_RETRYCANCEL, IDCANCEL) = IDRETRY;
 end;

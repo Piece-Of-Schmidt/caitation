@@ -1,0 +1,35 @@
+name: Release
+
+# Pushing a tag like v0.1.1 builds the Zotero plugin and the Windows installer and
+# creates a draft release with both; publish it after a last check.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tag matches the plugin version
+        run: |
+          version=$(python -c "import json; print(json.load(open('plugin/src/manifest.json'))['version'])")
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME, manifest $version"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          test -f "docs/releases/$GITHUB_REF_NAME.md"
+          grep -q "releases/download/$GITHUB_REF_NAME/caitation-zotero-$version.xpi" plugin/updates.json
+      - run: python plugin/build.py
+      - run: bash installer/build.sh
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --title "Caitation $VERSION" \
+            --notes-file "docs/releases/$GITHUB_REF_NAME.md" \
+            "dist/caitation-zotero-$VERSION.xpi" "dist/Caitation-Setup-$VERSION.exe"

@@ -10,6 +10,15 @@
               "strict_min_version": "8.0"
             }
           }
+        },
+        {
+          "version": "0.1.1",
+          "update_link": "https://github.com/Piece-Of-Schmidt/caitation/releases/download/v0.1.1/caitation-zotero-0.1.1.xpi",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "8.0"
+            }
+          }
         }
       ]
     }
