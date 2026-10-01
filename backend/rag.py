@@ -458,25 +458,45 @@ def _apa_reference(item: ZoteroItem) -> str:
     return " ".join(p for p in parts if p)
 
 
-ANSWER_SYSTEM_PROMPT = """Du hilfst dabei, Paper in einer wissenschaftlichen Literaturdatenbank (Zotero) \
+# Shared by both modes. Every quote is checked word for word afterwards (verification.py);
+# without these rules Claude tended to put its own German translations in quotation marks.
+QUOTE_RULES = """Regeln für wörtliche Zitate:
+- Text in Anführungszeichen muss exakt so im Auszug stehen, in der Originalsprache des \
+Auszugs. Übersetze nie innerhalb von Anführungszeichen.
+- Willst du eine englische Stelle auf Deutsch wiedergeben, formuliere sie als indirekte \
+Wiedergabe ohne Anführungszeichen, z.B.: Laut Maier et al. (2018, S. 5) berücksichtigt LDA \
+keine zeitliche Entwicklung.
+- Beispiel bei einem englischen Auszug: FALSCH ist „LDA berücksichtigt die Zeitdimension \
+nicht" (Maier et al., 2018, S. 5) – das ist eine Übersetzung, kein Zitat. RICHTIG ist \
+„The main limitation of the LDA model is that it does not take into consideration the time \
+dimension" (Maier et al., 2018, S. 5) oder ohne Anführungszeichen: Maier et al. (2018, S. 5) \
+zufolge berücksichtigt LDA die Zeitdimension nicht.
+- Auslassungen kennzeichnest du mit […].
+- Seitenzahl im In-Text-Zitat nur, wenn der Auszug eine hat. Auszüge ohne Seitenzahl \
+(Abstract, Webseite) zitierst du ohne Seitenangabe, z.B. (Armantier et al., 2016) – \
+niemals "S. 0"."""
+
+ANSWER_SYSTEM_PROMPT = f"""Du hilfst dabei, Paper in einer wissenschaftlichen Literaturdatenbank (Zotero) \
 wiederzufinden und Fragen dazu zu beantworten. Du bekommst eine Nutzerfrage und dazu Auszüge \
 aus mehreren Papers mit vollständigen bibliografischen Angaben. Antworte auf Deutsch, präzise und knapp.
 
 Zitierregeln:
 - Belege jede inhaltliche Aussage mit einem In-Text-Zitat im APA-Stil inkl. Seitenzahl, \
-z.B. (Armantier et al., 2016, S. 12). Hat ein Auszug keine Seitenzahl (Abstract, Webseite), lass die Seitenangabe weg, z.B. (Armantier et al., 2016) – niemals "S. 0".
+z.B. (Armantier et al., 2016, S. 12).
 - Auszüge, die als "vom Nutzer markiert" gekennzeichnet sind, stammen aus persönlichen \
 Highlights des Nutzers — zitiere sie bevorzugt, wenn sie zur Frage passen.
 - Schließe die Antwort mit einem Abschnitt "Literatur" ab, der die tatsächlich zitierten \
 Quellen als vollständige APA-Referenzen auflistet (übernimm die mitgelieferten Referenzzeilen wörtlich).
-- Wenn kein Auszug wirklich zur Frage passt, sag das ehrlich, statt zu spekulieren."""
+- Wenn kein Auszug wirklich zur Frage passt, sag das ehrlich, statt zu spekulieren.
 
-EVIDENCE_SYSTEM_PROMPT = """Du prüfst für eine wissenschaftliche Literaturdatenbank (Zotero), ob eine \
+{QUOTE_RULES}"""
+
+EVIDENCE_SYSTEM_PROMPT = f"""Du prüfst für eine wissenschaftliche Literaturdatenbank (Zotero), ob eine \
 Behauptung durch die Literatur des Nutzers gedeckt ist. Du bekommst eine Behauptung und Auszüge aus \
 mehreren Papers mit vollständigen bibliografischen Angaben. Antworte auf Deutsch.
 
 Gehe jede Quelle einzeln durch und ordne sie ein:
-- **Stützt die Behauptung** — mit wörtlichem Zitat aus dem Auszug und In-Text-Zitat im APA-Stil inkl. Seitenzahl (nur wenn der Auszug eine hat; niemals "S. 0")
+- **Stützt die Behauptung** — mit wörtlichem Zitat aus dem Auszug und In-Text-Zitat im APA-Stil
 - **Widerspricht der Behauptung** — ebenso mit Beleg
 - Quellen, die zur Behauptung nichts beitragen, lässt du komplett weg.
 
@@ -492,7 +512,15 @@ Struktur der Antwort:
 (übernimm die mitgelieferten Referenzzeilen wörtlich).
 
 Sei streng: ein Auszug stützt eine Behauptung nur, wenn er sie wirklich inhaltlich trägt, \
-nicht wenn er bloß dasselbe Thema behandelt."""
+nicht wenn er bloß dasselbe Thema behandelt.
+
+{QUOTE_RULES}"""
+
+
+_QUOTE_REMINDER = (
+    "(Erinnerung: In Anführungszeichen nur wörtlicher Text in der Sprache des Auszugs; "
+    "deutsche Wiedergaben englischer Stellen ohne Anführungszeichen.)"
+)
 
 
 def _excerpt_location(hit: dict) -> str:
@@ -542,10 +570,10 @@ def _prepare_ask(
 
     if mode == "evidence":
         system_prompt = EVIDENCE_SYSTEM_PROMPT
-        user_content = f"Behauptung: {query}\n\nGefundene Auszüge:\n\n{context}"
+        user_content = f"Behauptung: {query}\n\n{_QUOTE_REMINDER}\n\nGefundene Auszüge:\n\n{context}"
     else:
         system_prompt = ANSWER_SYSTEM_PROMPT
-        user_content = f"Frage: {query}\n\nGefundene Auszüge:\n\n{context}"
+        user_content = f"Frage: {query}\n\n{_QUOTE_REMINDER}\n\nGefundene Auszüge:\n\n{context}"
 
     messages = [
         {"role": m["role"], "content": m["content"]}

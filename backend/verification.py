@@ -6,6 +6,9 @@ quote in an answer gets a status:
 - "verified":   found word for word (ignoring case, whitespace, hyphenation, ligatures
                 and quote/dash variants) in a source excerpt or in the keyword index
 - "deviates":   a close but not exact match (e.g. a word changed or left out)
+- "translated": not found, but the quote is German and the sources are English: most
+                likely Claude's own translation in quotation marks. Not a usable quote,
+                and deliberately not "verified": a translation can't be checked word for word.
 - "not_found":  nothing similar in the sources
 """
 
@@ -22,6 +25,25 @@ _ELLIPSIS = re.compile(r"\s*(?:\[\s*(?:\.\.\.|…)\s*\]|\.\.\.|…)\s*")
 MIN_QUOTE_CHARS = 25  # shorter quoted strings are terms or titles, not citations
 MIN_FRAGMENT_CHARS = 12
 DEVIATION_THRESHOLD = 0.8
+
+
+_STOPWORDS = {  # function words unique to one language ("in", "an" exist in both)
+    "de": {"der", "die", "das", "und", "ist", "nicht", "mit", "von", "zu", "den", "dem", "des",
+           "dass", "sich", "auf", "für", "eine", "ein", "einer", "werden", "wird", "auch", "bei",
+           "oder", "wie", "zwischen", "sind", "im", "durch", "nach", "über", "diese", "dieser"},
+    "en": {"the", "and", "is", "not", "with", "of", "to", "that", "for", "are", "be", "this",
+           "by", "on", "or", "from", "between", "which", "it", "its", "was", "were", "has",
+           "have", "their", "these", "than"},
+}
+
+
+def language(text: str) -> str | None:
+    """'de' or 'en' by function words; None if unclear. Only needs to tell these two apart."""
+    words = re.findall(r"[a-zäöüß]+", text.casefold())
+    scores = {lang: sum(w in stop for w in words) for lang, stop in _STOPWORDS.items()}
+    best = max(scores, key=scores.get)
+    other = min(scores, key=scores.get)
+    return best if scores[best] >= 2 and scores[best] > 2 * scores[other] else None
 
 
 def normalize(text: str) -> str:
@@ -130,6 +152,9 @@ def verify_quotes(answer: str, sources: list[dict]) -> list[dict]:
             status = "deviates" if best >= DEVIATION_THRESHOLD else "not_found"
             if status == "not_found":
                 source = None
+                source_languages = {language(src.get("text", "")) for src in sources} - {None}
+                if language(quote) == "de" and source_languages == {"en"}:
+                    status = "translated"
 
         found_page = source.get("page") if source else None
         results.append({

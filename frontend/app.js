@@ -10,8 +10,13 @@ const els = {
   submit: $("#submitBtn"),
   modeHint: $("#modeHint"),
   filterToggle: $("#filterToggle"),
-  filterPanel: $("#filterPanel"),
   filterCount: $("#filterCount"),
+  activeFilters: $("#activeFilters"),
+  sidepane: $("#sidepane"),
+  collectionTree: $("#collectionTree"),
+  tagList: $("#tagList"),
+  tagFilter: $("#tagFilter"),
+  itemPane: $("#itemPane"),
   results: $("#results"),
   answerBox: $("#answerBox"),
   chatLog: $("#chatLog"),
@@ -241,7 +246,7 @@ function showView(name) {
   if (views.current === name) return;
   views.current = name;
   for (const [key, section] of Object.entries(els.views)) section.hidden = key !== name;
-  for (const link of document.querySelectorAll(".nav a")) {
+  for (const link of document.querySelectorAll(".tabs a")) {
     if (link.dataset.view === name) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
@@ -307,72 +312,165 @@ els.form.addEventListener("change", (e) => {
   }
 });
 
-/* ---------------------------------------------------------------- filters */
+/* ---------------------------------------------------------------- filters (left pane) */
 
 const FILTER_FIELDS = {
   year_from: $("#yearFrom"),
   year_to: $("#yearTo"),
   item_type: $("#itemType"),
-  collection: $("#collectionSelect"),
-  library: $("#librarySelect"),
-  tag: $("#tagInput"),
 };
 const annotationsOnly = $("#annotationsOnly");
 
+// selections made in the collection tree and the tag selector
+const treeFilter = { library: "", collection: "", tag: "" };
+let filterOptions = { libraries: [], collections: [], tags: [] };
+
+const FILTER_LABELS = {
+  library: (v) => v,
+  collection: (v) => `Sammlung: ${v}`,
+  tag: (v) => `Tag: ${v}`,
+  item_type: (v) => typeLabel(v),
+  year_from: (v) => `ab ${v}`,
+  year_to: (v) => `bis ${v}`,
+  annotations_only: () => "Nur Highlights",
+};
+
 function currentFilters() {
   const filters = {};
+  for (const [key, value] of Object.entries(treeFilter)) if (value) filters[key] = value;
   for (const [key, el] of Object.entries(FILTER_FIELDS)) if (el.value.trim()) filters[key] = el.value.trim();
   if (annotationsOnly.checked) filters.annotations_only = true;
   return filters;
 }
 
-function updateFilterCount() {
-  const n = Object.keys(currentFilters()).length;
-  els.filterCount.hidden = n === 0;
-  els.filterCount.textContent = n;
+function clearFilter(key) {
+  if (key in treeFilter) treeFilter[key] = "";
+  else if (key === "annotations_only") annotationsOnly.checked = false;
+  else if (FILTER_FIELDS[key]) FILTER_FIELDS[key].value = "";
 }
 
-function setFilterPanel(open) {
-  els.filterPanel.hidden = !open;
+// Shows active filters as removable chips above the list (the left pane may be hidden).
+function updateFilterCount() {
+  const filters = currentFilters();
+  const keys = Object.keys(filters);
+  els.filterCount.hidden = keys.length === 0;
+  els.filterCount.textContent = keys.length;
+  els.activeFilters.hidden = keys.length === 0;
+  els.activeFilters.innerHTML = keys.length
+    ? `Gefiltert: ${keys.map((key) => `
+        <button type="button" class="filter-chip" data-clear-filter="${key}" title="Filter entfernen">
+          ${escapeHtml(FILTER_LABELS[key](filters[key]))}${icon("close")}
+        </button>`).join("")}`
+    : "";
+  renderTree();
+  renderTags();
+}
+
+function filtersChanged() {
+  updateFilterCount();
+  // like selecting a collection in Zotero: the list follows immediately
+  if (state.lastSearch && currentMode() === "search" && !state.streaming) {
+    runSearch(state.lastSearch, currentFilters());
+  }
+}
+
+function renderTree() {
+  const row = (kind, value, label, iconName, child = false) => {
+    const selected = kind === "all"
+      ? !treeFilter.library && !treeFilter.collection
+      : treeFilter[kind] === value;
+    return `<button type="button" class="tree-row${child ? " is-child" : ""}" role="treeitem"
+      aria-selected="${selected}" data-tree="${kind}" data-value="${escapeHtml(value)}" title="${escapeHtml(label)}">
+      ${icon(iconName)}<span>${escapeHtml(label)}</span></button>`;
+  };
+  const libraries = filterOptions.libraries;
+  const rows = [row("all", "", libraries.length > 1 ? "Alle Bibliotheken" : "Meine Bibliothek", "library")];
+  if (libraries.length > 1) {
+    for (const lib of libraries) rows.push(row("library", lib, lib, lib === "Meine Bibliothek" ? "library" : "group", true));
+  }
+  for (const c of filterOptions.collections) rows.push(row("collection", c, c, "folder", true));
+  els.collectionTree.innerHTML = rows.join("");
+}
+
+function renderTags() {
+  const needle = els.tagFilter.value.trim().toLowerCase();
+  const tags = filterOptions.tags.filter((t) => !needle || t.toLowerCase().includes(needle));
+  const shown = tags.slice(0, 300);
+  els.tagList.innerHTML = shown.length
+    ? shown.map((t) => `<button type="button" class="tag-item" data-tag-select="${escapeHtml(t)}"
+        aria-pressed="${treeFilter.tag === t}">${escapeHtml(t)}</button>`).join("")
+      + (tags.length > shown.length ? `<span class="tag-empty">… ${tags.length - shown.length} weitere, Filter nutzen</span>` : "")
+    : `<span class="tag-empty">${filterOptions.tags.length ? "Keine passenden Tags" : "Keine Tags"}</span>`;
+}
+
+els.collectionTree.addEventListener("click", (e) => {
+  const row = e.target.closest("[data-tree]");
+  if (!row) return;
+  const { tree: kind, value } = row.dataset;
+  if (kind === "all") {
+    treeFilter.library = "";
+    treeFilter.collection = "";
+  } else {
+    treeFilter[kind] = treeFilter[kind] === value ? "" : value;
+  }
+  filtersChanged();
+});
+
+els.tagList.addEventListener("click", (e) => {
+  const tag = e.target.closest("[data-tag-select]");
+  if (!tag) return;
+  treeFilter.tag = treeFilter.tag === tag.dataset.tagSelect ? "" : tag.dataset.tagSelect;
+  filtersChanged();
+});
+
+els.tagFilter.addEventListener("input", renderTags);
+
+els.activeFilters.addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-clear-filter]");
+  if (!chip) return;
+  clearFilter(chip.dataset.clearFilter);
+  filtersChanged();
+});
+
+for (const el of [...Object.values(FILTER_FIELDS), annotationsOnly]) el.addEventListener("change", filtersChanged);
+
+$("#clearFilters").addEventListener("click", () => {
+  for (const key of [...Object.keys(treeFilter), ...Object.keys(FILTER_FIELDS), "annotations_only"]) clearFilter(key);
+  filtersChanged();
+});
+
+function setSidepane(open) {
+  els.sidepane.classList.toggle("is-open", open);
   els.filterToggle.setAttribute("aria-expanded", String(open));
 }
 
-els.filterToggle.addEventListener("click", () => setFilterPanel(els.filterPanel.hidden));
-els.filterPanel.addEventListener("input", updateFilterCount);
-els.filterPanel.addEventListener("change", updateFilterCount);
-
-$("#clearFilters").addEventListener("click", () => {
-  for (const el of Object.values(FILTER_FIELDS)) el.value = "";
-  annotationsOnly.checked = false;
-  updateFilterCount();
-});
+els.filterToggle.addEventListener("click", () => setSidepane(!els.sidepane.classList.contains("is-open")));
 
 async function loadFilters() {
   try {
     const data = await api("/api/filters");
+    filterOptions = {
+      libraries: data.libraries || [],
+      collections: [...data.collections].sort((a, b) => a.localeCompare(b, "de")),
+      tags: [...data.tags].sort((a, b) => a.localeCompare(b, "de")),
+    };
     const typeSel = FILTER_FIELDS.item_type;
-    const collSel = FILTER_FIELDS.collection;
     typeSel.length = 1;
-    collSel.length = 1;
     const types = data.item_types.map((t) => [t, typeLabel(t)]).sort((a, b) => a[1].localeCompare(b[1], "de"));
     for (const [value, label] of types) typeSel.appendChild(new Option(label, value));
-    for (const c of data.collections) collSel.appendChild(new Option(c, c));
-    const libSel = FILTER_FIELDS.library;
-    libSel.length = 1;
-    for (const lib of data.libraries || []) libSel.appendChild(new Option(lib, lib));
-    libSel.closest(".field").hidden = (data.libraries || []).length < 2; // only with group libraries
-    $("#tagList").innerHTML = data.tags.map((t) => `<option value="${escapeHtml(t)}"></option>`).join("");
     if (data.year_min) FILTER_FIELDS.year_from.placeholder = data.year_min;
     if (data.year_max) FILTER_FIELDS.year_to.placeholder = data.year_max;
+    updateFilterCount();
   } catch { /* status pill already reports a dead server */ }
 }
 
+// Dashboard shortcuts (click on a tag, collection or type)
 function applyFilterAndSearch(key, value, label) {
-  FILTER_FIELDS[key].value = value;
-  updateFilterCount();
-  setFilterPanel(true);
+  if (key in treeFilter) treeFilter[key] = value;
+  else FILTER_FIELDS[key].value = value;
   location.hash = "search";
   showView("search");
+  filtersChanged();
   toast(`Filter gesetzt: ${label}`);
 }
 
@@ -385,6 +483,10 @@ const state = {
   hasResults: false,
   chatHistory: [],
   lastRender: null,
+  lastSearch: "",
+  results: [],
+  terms: [],
+  selected: -1,
 };
 
 const EMPTY_TITLES = {
@@ -404,21 +506,20 @@ function renderEmptyState() {
         ${cfg.examples.map((ex) => `<button type="button" class="example-chip" data-example="${escapeHtml(ex)}">${escapeHtml(ex)}</button>`).join("")}
       </div>
     </div>`;
+  renderItemPane(null);
 }
 
 function renderSkeleton(note = "") {
-  const card = `
-    <div class="skeleton-card">
-      <div class="skeleton-line title"></div>
-      <div class="skeleton-line meta"></div>
+  const row = `
+    <div class="skeleton-row">
+      <div></div>
+      <div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
       <div class="skeleton-line"></div>
-      <div class="skeleton-line short"></div>
+      <div class="skeleton-line"></div>
     </div>`;
   els.results.innerHTML = `
-    <div class="results-head">
-      <h2 class="results-title">${note ? escapeHtml(note) : "Suche…"}</h2>
-    </div>
-    <div class="result-list">${card.repeat(3)}</div>`;
+    <div class="list-head"><span>${note ? escapeHtml(note) : "Suche…"}</span></div>
+    ${row.repeat(6)}`;
 }
 
 function renderError(err) {
@@ -428,48 +529,34 @@ function renderError(err) {
     </div>`;
 }
 
-function resultCard(r, terms) {
+const TYPE_ICONS = {
+  book: "book", bookSection: "book", thesis: "book",
+  webpage: "globe", blogPost: "globe", newspaperArticle: "globe", magazineArticle: "globe",
+};
+
+function resultRow(r, index, terms) {
   const isHighlight = r.chunk_type === "annotation";
-  const meta = [];
-  const authors = shortAuthors(r.authors);
-  if (authors) meta.push(`<span title="${escapeHtml(r.authors)}">${escapeHtml(authors)}</span>`);
-  if (r.year) meta.push(`<span>${r.year}</span>`);
-  const metaHtml = meta.join('<span class="sep">·</span>');
-  const pills = [
-    r.item_type ? `<span class="pill">${escapeHtml(typeLabel(r.item_type))}</span>` : "",
-    isHighlight ? `<span class="pill pill-good" title="Fundstelle aus deinen PDF-Highlights">${icon("highlight")}Dein Highlight</span>` : "",
-    r.duplicate_count ? `<span class="pill pill-warn" title="Weitere identische Einträge wurden zusammengefasst">+${r.duplicate_count} Dublette${r.duplicate_count > 1 ? "n" : ""}</span>` : "",
+  const badges = [
+    isHighlight ? `<span class="badge badge-good" title="Fundstelle aus deinen PDF-Highlights">${icon("highlight")}Highlight</span>` : "",
+    r.duplicate_count ? `<span class="badge badge-warn" title="Weitere identische Einträge wurden zusammengefasst">+${r.duplicate_count} Dublette${r.duplicate_count > 1 ? "n" : ""}</span>` : "",
   ].join("");
-
-  const page = (p) => (p ? ` <span class="rc-page">S. ${p}</span>` : "");
-  const snippet = r.snippet
-    ? `<p class="rc-snippet${isHighlight ? " is-highlight" : ""}">${highlight(r.snippet, terms)}${page(r.page)}</p>`
-    : "";
-  const more = r.matches && r.matches.length
-    ? `<details class="more-matches">
-         <summary>${r.matches.length} weitere Fundstelle${r.matches.length > 1 ? "n" : ""}</summary>
-         ${r.matches.map((m) => `<p class="rc-snippet">${highlight(m.snippet, terms)}${page(m.page)}</p>`).join("")}
-       </details>`
-    : "";
-  const key = encodeURIComponent(r.item_key);
-
   return `
-    <article class="result-card">
-      <h3 class="rc-title">${formatTitle(r.title)}</h3>
-      <div class="rc-meta">${metaHtml}${pills}</div>
-      ${snippet}
-      ${more}
-      <div class="rc-actions">
-        <a class="rc-action" href="${escapeHtml(r.zotero_link)}">${icon("zotero")}In Zotero</a>
-        ${r.has_pdf ? `<a class="rc-action" href="/api/pdf/${key}#page=${r.page || 1}" target="_blank" rel="noopener">${icon("file")}PDF${r.page ? ` · S. ${r.page}` : ""}</a>` : ""}
-        <button type="button" class="rc-action" data-related="${escapeHtml(r.item_key)}" data-title="${escapeHtml(plainTitle(r.title))}">${icon("network")}Ähnliche Paper</button>
-        <a class="rc-action" href="/api/bibtex?keys=${key}" download>${icon("download")}BibTeX</a>
-      </div>
-    </article>`;
+    <li class="item-row" role="option" id="item-${index}" data-index="${index}" aria-selected="false">
+      <span class="ir-type" title="${escapeHtml(typeLabel(r.item_type))}">${icon(TYPE_ICONS[r.item_type] || "doc")}</span>
+      <span class="ir-main">
+        <span class="ir-title">${formatTitle(r.title)}${badges ? `<span class="ir-badges">${badges}</span>` : ""}</span>
+        ${r.snippet ? `<span class="ir-snippet">${highlight(r.snippet, terms)}</span>` : ""}
+      </span>
+      <span class="ir-creator" title="${escapeHtml(r.authors || "")}">${escapeHtml(shortAuthors(r.authors))}</span>
+      <span class="ir-year">${r.year || ""}</span>
+    </li>`;
 }
 
-function renderResults(results, { title = "Treffer", terms = [], preview = false, back = false } = {}) {
+function renderResults(results, { title = "Treffer", terms = [], preview = false, back = false, keepSelection = false } = {}) {
   state.hasResults = true;
+  const previousKey = keepSelection ? state.results[state.selected]?.item_key : null;
+  state.results = results;
+  state.terms = terms;
   if (!back) state.lastRender = { results, title, terms };
   if (!results.length) {
     els.results.innerHTML = `
@@ -477,21 +564,39 @@ function renderResults(results, { title = "Treffer", terms = [], preview = false
         <h2>Keine Treffer</h2>
         <p>Versuch andere Begriffe oder lockere die Filter.</p>
       </div>`;
+    renderItemPane(null);
     return;
   }
   const keys = results.map((r) => r.item_key).join(",");
   els.results.innerHTML = `
-    <div class="results-head">
-      ${back ? `<button type="button" class="btn btn-ghost btn-sm" data-back>${icon("back")}Zurück</button>` : ""}
-      <h2 class="results-title">${escapeHtml(title)} <strong>${results.length}</strong></h2>
+    <div class="list-head">
+      ${back ? `<button type="button" class="link-btn" data-back>${icon("back")}Zurück</button>` : ""}
+      <span>${escapeHtml(title)}: <strong>${results.length}</strong></span>
       ${preview ? '<span class="refine-hint">Ranking wird präzisiert…</span>' : ""}
       <span class="spacer"></span>
-      <a class="btn btn-ghost btn-sm" href="/api/bibtex?keys=${encodeURIComponent(keys)}" download>${icon("download")}BibTeX (${results.length})</a>
+      <a class="link-btn" href="/api/bibtex?keys=${encodeURIComponent(keys)}" download>${icon("download")}BibTeX</a>
     </div>
-    <div class="result-list${preview ? " is-preview" : ""}">${results.map((r) => resultCard(r, terms)).join("")}</div>`;
+    <ul class="item-list${preview ? " is-preview" : ""}" role="listbox" tabindex="0" aria-label="${escapeHtml(title)}">
+      ${results.map((r, i) => resultRow(r, i, terms)).join("")}
+    </ul>`;
+  const keep = previousKey ? results.findIndex((r) => r.item_key === previousKey) : -1;
+  selectResult(keep >= 0 ? keep : 0, { focus: false, open: false });
 }
 
-els.results.addEventListener("click", async (e) => {
+function selectResult(index, { focus = true, open = true } = {}) {
+  const list = els.results.querySelector(".item-list");
+  if (!list || index < 0 || index >= state.results.length) return;
+  state.selected = index;
+  for (const row of list.children) row.setAttribute("aria-selected", String(Number(row.dataset.index) === index));
+  const row = list.children[index];
+  list.setAttribute("aria-activedescendant", row.id);
+  row.scrollIntoView({ block: "nearest" });
+  if (focus) list.focus({ preventScroll: true });
+  renderItemPane(state.results[index]);
+  if (open) els.itemPane.classList.add("is-open");
+}
+
+els.results.addEventListener("click", (e) => {
   const example = e.target.closest("[data-example]");
   if (example) {
     els.query.value = example.dataset.example;
@@ -503,8 +608,121 @@ els.results.addEventListener("click", async (e) => {
     if (last) renderResults(last.results, { title: last.title, terms: last.terms });
     return;
   }
-  const related = e.target.closest("[data-related]");
-  if (related) showRelated(related.dataset.related, related.dataset.title);
+  const row = e.target.closest(".item-row");
+  if (row) selectResult(Number(row.dataset.index));
+});
+
+// double click opens the item in Zotero, as in Zotero's own list
+els.results.addEventListener("dblclick", (e) => {
+  const row = e.target.closest(".item-row");
+  if (row) window.location.href = state.results[Number(row.dataset.index)].zotero_link;
+});
+
+els.results.addEventListener("keydown", (e) => {
+  if (!e.target.closest(".item-list")) return;
+  const moves = { ArrowDown: 1, ArrowUp: -1, PageDown: 10, PageUp: -10 };
+  if (e.key in moves) {
+    e.preventDefault();
+    const next = Math.min(state.results.length - 1, Math.max(0, state.selected + moves[e.key]));
+    selectResult(next);
+  } else if (e.key === "Home" || e.key === "End") {
+    e.preventDefault();
+    selectResult(e.key === "Home" ? 0 : state.results.length - 1);
+  } else if (e.key === "Enter" && state.results[state.selected]) {
+    window.location.href = state.results[state.selected].zotero_link;
+  }
+});
+
+/* ---------------------------------------------------------------- item pane (right) */
+
+function section(id, title, body, { open = true, count = "" } = {}) {
+  return `
+    <details class="ip-section" data-section="${id}"${open ? " open" : ""}>
+      <summary>${icon("twisty")}${escapeHtml(title)}${count ? `<span class="ip-count">${escapeHtml(String(count))}</span>` : ""}</summary>
+      <div class="ip-body">${body}</div>
+    </details>`;
+}
+
+function passage(text, page, { highlight: isHighlight = false, key = "", hasPdf = false } = {}) {
+  const pdfLink = hasPdf && page
+    ? `<a href="/api/pdf/${encodeURIComponent(key)}#page=${page}" target="_blank" rel="noopener">PDF öffnen</a>`
+    : "";
+  return `
+    <blockquote class="passage${isHighlight ? " is-highlight" : ""}">
+      ${highlight(text, state.terms)}
+      ${page || isHighlight || pdfLink ? `<div class="passage-meta">${isHighlight ? "<span>Dein Highlight</span>" : ""}${page ? `<span>S. ${page}</span>` : ""}${pdfLink}</div>` : ""}
+    </blockquote>`;
+}
+
+let relatedCtrl = null;
+
+function renderItemPane(r) {
+  relatedCtrl?.abort();
+  if (!r) {
+    els.itemPane.classList.remove("is-open");
+    const count = state.results.length;
+    els.itemPane.innerHTML = `<div class="itempane-empty">${count ? `${count} Einträge in dieser Ansicht` : "Kein Eintrag ausgewählt"}</div>`;
+    return;
+  }
+  const key = encodeURIComponent(r.item_key);
+  const info = [
+    ["Typ", typeLabel(r.item_type)],
+    ["Autor:innen", r.authors],
+    ["Jahr", r.year],
+    ["Bibliothek", filterOptions.libraries.length > 1 ? r.library : ""],
+  ].filter(([, value]) => value);
+  const passages = [];
+  if (r.snippet) passages.push(passage(r.snippet, r.page, { highlight: r.chunk_type === "annotation", key: r.item_key, hasPdf: r.has_pdf }));
+  for (const m of r.matches || []) passages.push(passage(m.snippet, m.page, { key: r.item_key, hasPdf: r.has_pdf }));
+
+  els.itemPane.innerHTML = `
+    <div class="ip-header">
+      <button type="button" class="toolbar-btn icon-only ip-close" data-close-pane title="Schließen">${icon("close")}</button>
+      <h2 class="ip-title">${formatTitle(r.title)}</h2>
+      <div class="ip-actions">
+        <a class="btn" href="${escapeHtml(r.zotero_link)}">${icon("zotero")}In Zotero zeigen</a>
+        ${r.has_pdf ? `<a class="btn" href="/api/pdf/${key}#page=${r.page || 1}" target="_blank" rel="noopener">${icon("file")}PDF</a>` : ""}
+        <a class="btn" href="/api/bibtex?keys=${key}" download>${icon("download")}BibTeX</a>
+      </div>
+    </div>
+    ${section("info", "Info", `<dl class="info-grid">${info.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join("")}</dl>`)}
+    ${passages.length ? section("passages", r.chunk_type === "metadata" ? "Abstract & Fundstellen" : "Fundstellen", passages.join(""), { count: passages.length }) : ""}
+    ${section("related", "Ähnliche Paper", '<p class="ip-muted">Wird geladen…</p>')}`;
+  loadRelatedInto(r);
+}
+
+async function loadRelatedInto(r) {
+  const ctrl = (relatedCtrl = new AbortController());
+  const body = els.itemPane.querySelector('[data-section="related"] .ip-body');
+  try {
+    const data = await api(`/api/related/${encodeURIComponent(r.item_key)}?top_k=5`, { signal: ctrl.signal });
+    if (ctrl.signal.aborted) return;
+    state.related = data.results;
+    body.innerHTML = data.results.length
+      ? `<div class="related-list">${data.results.map((x, i) => `
+          <button type="button" class="related-row" data-related-index="${i}" title="${escapeHtml(plainTitle(x.title))}">
+            <span class="rr-title">${formatTitle(x.title)}</span>
+            <span class="rr-meta">${escapeHtml([shortAuthors(x.authors), x.year].filter(Boolean).join(" · "))}</span>
+          </button>`).join("")}</div>
+          <button type="button" class="link-btn" data-related-list="${escapeHtml(r.item_key)}" data-title="${escapeHtml(plainTitle(r.title))}">Als Liste anzeigen</button>`
+      : '<p class="ip-muted">Keine ähnlichen Paper gefunden.</p>';
+  } catch (err) {
+    if (!isAbort(err)) body.innerHTML = '<p class="ip-muted">Konnte nicht geladen werden.</p>';
+  }
+}
+
+els.itemPane.addEventListener("click", (e) => {
+  if (e.target.closest("[data-close-pane]")) {
+    els.itemPane.classList.remove("is-open");
+    return;
+  }
+  const rel = e.target.closest("[data-related-index]");
+  if (rel) {
+    renderItemPane(state.related[Number(rel.dataset.relatedIndex)]);
+    return;
+  }
+  const list = e.target.closest("[data-related-list]");
+  if (list) showRelated(list.dataset.relatedList, list.dataset.title);
 });
 
 async function showRelated(itemKey, title) {
@@ -512,7 +730,6 @@ async function showRelated(itemKey, title) {
   const ctrl = (state.searchCtrl = new AbortController());
   els.answerBox.hidden = true;
   renderSkeleton("Suche ähnliche Paper…");
-  window.scrollTo({ top: 0, behavior: "smooth" });
   try {
     const data = await api(`/api/related/${encodeURIComponent(itemKey)}`, { signal: ctrl.signal });
     renderResults(data.results, {
@@ -529,6 +746,7 @@ async function showRelated(itemKey, title) {
 async function runSearch(query, filters) {
   state.searchCtrl?.abort();
   const ctrl = (state.searchCtrl = new AbortController());
+  state.lastSearch = query;
   els.answerBox.hidden = true;
   const terms = queryTerms(query);
   renderSkeleton(serverStatus.ready ? "" : "Modelle werden geladen (einmalig nach dem Start)…");
@@ -541,8 +759,7 @@ async function runSearch(query, filters) {
     renderResults(preview.results, { terms, preview: preview.results.length > 0 });
     if (!preview.results.length) return;
     const full = await api(`/api/search?${params}`, { signal: ctrl.signal });
-    renderResults(full.results, { terms });
-    els.results.querySelector(".result-list")?.classList.add("no-anim");
+    renderResults(full.results, { terms, keepSelection: true });
   } catch (err) {
     if (!isAbort(err)) renderError(err);
   }
@@ -573,6 +790,7 @@ async function streamAsk(query, mode, filters) {
   );
   msg.scrollIntoView({ block: "nearest", behavior: "smooth" });
   els.query.value = "";
+  state.lastSearch = "";
   const terms = queryTerms(query);
   renderSkeleton("Quellen werden gesucht…");
 
@@ -672,6 +890,7 @@ async function streamAsk(query, mode, filters) {
 const QUOTE_STATUS = {
   verified: { cls: "is-verified", mark: "✓", label: "wörtlich im Quelltext gefunden" },
   deviates: { cls: "is-deviates", mark: "≈", label: "weicht vom Quelltext ab" },
+  translated: { cls: "is-deviates", mark: "⇄", label: "übersetzt, kein wörtliches Zitat – im Original prüfen" },
   not_found: { cls: "is-missing", mark: "✗", label: "nicht im Quelltext gefunden" },
 };
 
@@ -718,7 +937,7 @@ function markQuotes(root, checks) {
 }
 
 function quoteSummary(checks) {
-  const counts = { verified: 0, deviates: 0, not_found: 0 };
+  const counts = { verified: 0, deviates: 0, translated: 0, not_found: 0 };
   for (const q of checks) counts[q.status] += 1;
   const pageIssues = checks.filter((q) => q.page_mismatch).length;
   const allGood = counts.verified === checks.length && !pageIssues;
@@ -728,6 +947,7 @@ function quoteSummary(checks) {
   const parts = [];
   if (counts.verified) parts.push(`${counts.verified} wörtlich belegt`);
   if (counts.deviates) parts.push(`${counts.deviates} abweichend`);
+  if (counts.translated) parts.push(`${counts.translated} übersetzt`);
   if (counts.not_found) parts.push(`${counts.not_found} nicht gefunden`);
   if (pageIssues) parts.push(`${pageIssues}× Seitenangabe prüfen`);
   box.innerHTML = `
@@ -739,7 +959,7 @@ function quoteSummary(checks) {
         „${escapeHtml(text)}"<span class="quote-src">${escapeHtml(quoteSource(q) || status.label)}</span>
         ${pageWarning(q) ? `<span class="quote-src quote-page-warning">${escapeHtml(pageWarning(q))}</span>` : ""}</li>`;
     }).join("")}</ul>
-    ${counts.not_found ? '<p class="quote-hint">Nicht gefundene Zitate vor dem Übernehmen unbedingt im PDF prüfen.</p>' : ""}`;
+    ${counts.not_found ? '<p class="quote-hint">Nicht gefundene Zitate vor dem Übernehmen im PDF prüfen – oft sind es übersetzte oder umformulierte Stellen, die nicht als wörtliches Zitat taugen.</p>' : ""}`;
   return box;
 }
 
@@ -1058,19 +1278,19 @@ async function loadDuplicates() {
     </div>
     ${data.groups.map((g) => `
       <section class="card dup-group">
-        <div class="dup-group-head"><span class="pill pill-warn">${escapeHtml(g.reason)}</span>${g.items.length} Einträge</div>
+        <div class="dup-group-head"><span class="badge badge-warn">${escapeHtml(g.reason)}</span>${g.items.length} Einträge</div>
         ${g.items.map((i) => `
           <div class="dup-item">
             <div class="dup-item-body">
-              <h3 class="rc-title">${formatTitle(i.title)}</h3>
-              <div class="rc-meta">
+              <h3 class="dup-title">${formatTitle(i.title)}</h3>
+              <div class="dup-meta">
                 ${i.authors ? `<span>${escapeHtml(shortAuthors(i.authors))}</span><span class="sep">·</span>` : ""}
                 ${i.year ? `<span>${i.year}</span><span class="sep">·</span>` : ""}
-                <span class="pill">${escapeHtml(typeLabel(i.item_type))}</span>
-                ${i.has_pdf ? `<span class="pill pill-good">PDF</span>` : `<span class="pill">kein PDF</span>`}
+                <span class="badge">${escapeHtml(typeLabel(i.item_type))}</span>
+                ${i.has_pdf ? `<span class="badge badge-good">PDF</span>` : `<span class="badge">kein PDF</span>`}
               </div>
             </div>
-            <a class="rc-action" href="${escapeHtml(i.zotero_link)}">${icon("zotero")}In Zotero</a>
+            <a class="btn" href="${escapeHtml(i.zotero_link)}">${icon("zotero")}In Zotero zeigen</a>
           </div>`).join("")}
       </section>`).join("")}`;
 }

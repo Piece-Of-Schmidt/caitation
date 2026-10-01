@@ -83,3 +83,18 @@ def test_page_reference_of_the_next_quote_is_not_borrowed():
     first, second = check(answer)
     assert first["cited_page"] is None
     assert second["cited_page"] == 9
+
+
+def test_language_heuristic():
+    from backend.verification import language
+
+    assert language("Die Hauptlimitierung des Modells ist, dass es die Zeit nicht berücksichtigt") == "de"
+    assert language("The main limitation of the model is that it does not consider time") == "en"
+    assert language("LDA K Topics") is None
+
+
+def test_german_rendering_of_english_source_is_flagged_as_translation():
+    answer = "„Diese Vorteile scheinen mit den steigenden Anforderungen des Marktes an schnelle Nachrichten zusammenzufallen“"
+    [result] = check(answer)
+    assert result["status"] == "translated"
+    assert result["item_key"] is None  # a translation is never treated as verified
