@@ -20,7 +20,10 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 - [x] **Kein vorinstalliertes Python mehr nötig** (2026-10-01): Die Startskripte holen
       `uv` (feste Version, Prüfsumme) und richten damit Python 3.11 und alle Pakete im
       App-Ordner ein (frische Einrichtung unter Windows: 88 s). Die CI prüft genau diesen
-      Weg auf Windows, macOS und Linux. Noch offen: ein Installer mit Startmenü-Eintrag.
+      Weg auf Windows, macOS und Linux.
+- [x] **Windows-Installer** (Inno Setup, 2026-10-01, v0.1.1): pro Benutzer ohne Adminrechte,
+      Startmenü-Einträge, saubere Deinstallation; gebaut von der CI. Noch nicht signiert
+      (SmartScreen-Hinweis); für macOS gibt es weiterhin nur `start.command`.
 - [x] Fehlerprotokoll `data/caitation.log`; fehlgeschlagener Reindex wird in der Oberfläche angezeigt
 
 ## 2. Entscheidungen
@@ -35,9 +38,12 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
       mit Plugin-Datei; automatische Plugin-Updates über `plugin/updates.json`.
       Neue Plugin-Version: Version in `plugin/src/manifest.json` erhöhen, `plugin/build.py`,
       Release mit der `.xpi` anlegen und den Eintrag in `plugin/updates.json` ergänzen.
-- [ ] **Zugriff auf Zotero** über offizielle Schnittstellen (Plugin-API bzw. lokale API)
-      statt die Datenbankdatei zu kopieren; Zotero rät von direktem Datenbankzugriff ab,
-      weil sich das Schema ändern kann.
+- [x] **Warnung bei unbekanntem Datenbankformat** (2026-10-01, v0.1.1): Ist Zoteros
+      `userdata`-Version neuer als 125 (Zotero 9.0.6), warnt die Statusanzeige; scheitert das
+      Lesen, nennt die Fehlermeldung die Ursache.
+- [ ] **Zugriff auf Zotero** über offizielle Schnittstellen (lokale API bzw. Plugin) statt die
+      Datenbankdatei zu kopieren; Zotero rät von direktem Datenbankzugriff ab, weil sich das
+      Schema ändern kann. Geplant für das nächste Release (v0.2.0).
 
 ## 3. Lücken bei fremden Bibliotheken
 
@@ -62,6 +68,10 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 
 ## 4. Verlässlichkeit der Belege
 
+- [x] **Saubere Volltexte** (2026-10-01, v0.1.1): Trenn- und Steuerzeichen aus PDFs werden
+      entfernt (betraf 18 % der Abschnitte); PDFs mit unlesbarer Textebene werden erkannt und
+      per OCR gelesen; bestehende Indexe werden einmalig in place repariert.
+
 - [x] **Automatische Zitatprüfung im Beleg- und Frage-Modus** (2026-10-01): jedes
       wörtliche Zitat wird als „wörtlich belegt", „abweichend" oder „nicht gefunden"
       markiert, mit Quelle und Seite (`backend/verification.py`).
@@ -71,6 +81,9 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
       Fälle: mit Reranker 6/6 in den Top 8 (MRR 0,81), ohne 5/6 (MRR 0,67).
 - [ ] Testsammlung auf ~50 Fälle erweitern (Fragen und erwartete Paper aus der eigenen
       Arbeit; das kann nur jemand festlegen, der die Literatur kennt).
+
+- [ ] Dubletten-Erkennung: Artikel und gespeicherte Webseite desselben Papers werden nicht
+      zusammengefasst, wenn der Webseitentitel Zusätze trägt („… | Publications | CESifo“).
 
 ## 5. Rechtliches und Datenschutz (auch für ein freies Projekt)
 
