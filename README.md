@@ -97,6 +97,22 @@ Läuft Caitation nicht unter `http://127.0.0.1:8000`, lässt sich die Adresse im
 Konfigurationseditor von Zotero (*Einstellungen → Erweitert → Konfigurationseditor*) über
 `extensions.caitation.serverURL` ändern.
 
+## Lizenz und verwendete Modelle
+
+Caitation steht unter der [MIT-Lizenz](LICENSE). Alle Python-Abhängigkeiten sind frei
+lizenziert (MIT, BSD, Apache-2.0). Beim ersten Start werden zwei Modelle von Hugging Face
+geladen:
+
+- `intfloat/multilingual-e5-base` bzw. `-small` (Embeddings, MIT-Lizenz)
+- `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (Ranking). Das Modell selbst steht unter
+  Apache-2.0, wurde aber mit dem MS-MARCO-Datensatz trainiert, dessen Bedingungen nur
+  nicht-kommerzielle Nutzung erlauben. Für Forschung und Lehre passt das; wer Caitation
+  kommerziell einsetzen will, schaltet den Reranker mit `RERANKER_MODEL=` in `.env` ab
+  oder wählt ein anderes Modell.
+
+„Zotero" ist eine Marke der Corporation for Digital Scholarship; Caitation ist ein
+unabhängiges Projekt.
+
 ## Wenn etwas nicht klappt
 
 Fehler und Laufzeiten werden in `data/caitation.log` protokolliert. Schick diese Datei

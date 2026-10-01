@@ -63,13 +63,13 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 
 ## 5. Rechtliches und Datenschutz (auch für ein freies Projekt)
 
-- [ ] **Reranker-Modell:** `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` ist mit dem
+- [x] **Reranker-Modell** (in der README dokumentiert): `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` ist mit dem
       MS-MARCO-Datensatz trainiert, dessen Bedingungen nur nicht-kommerzielle Nutzung
       erlauben. Für Forschung an der Uni passt das; in der Doku erwähnen und ggf. eine
       Alternative anbieten.
-- [ ] **Name:** „Zotero" ist eine geschützte Marke; die Namensrichtlinien von Zotero
+- [x] **Name** („Caitation for Zotero", Markenhinweis in der README): „Zotero" ist eine geschützte Marke; die Namensrichtlinien von Zotero
       beachten (z.B. „Caitation für Zotero" statt „Zotero-…").
-- [ ] **Datenschutzhinweis:** Frage- und Beleg-Modus schicken Ausschnitte aus den PDFs an
+- [x] **Datenschutzhinweis** (README): Frage- und Beleg-Modus schicken Ausschnitte aus den PDFs an
       die Claude-API (Anthropic). Das muss vorher klar erkennbar sein; jede Person nutzt
       ihren eigenen API-Key. Die reine Suche bleibt komplett lokal.
 
