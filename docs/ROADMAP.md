@@ -85,8 +85,9 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 - [ ] Testsammlung auf ~50 Fälle erweitern (Fragen und erwartete Paper aus der eigenen
       Arbeit; das kann nur jemand festlegen, der die Literatur kennt).
 
-- [ ] Dubletten-Erkennung: Artikel und gespeicherte Webseite desselben Papers werden nicht
-      zusammengefasst, wenn der Webseitentitel Zusätze trägt („… | Publications | CESifo“).
+- [x] Dubletten-Erkennung: Artikel und gespeicherte Webseite desselben Papers werden auch
+      zusammengefasst, wenn der Webseitentitel den Seitennamen trägt („… | Publications | CESifo“)
+      (v0.2.1; an der echten Bibliothek 4 zusätzliche, korrekte Gruppen).
 
 ## 5. Rechtliches und Datenschutz (auch für ein freies Projekt)
 

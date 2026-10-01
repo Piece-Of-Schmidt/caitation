@@ -95,7 +95,7 @@ widerspricht, jeweils mit wörtlichem Zitat.
 
 ### 🗺️ Überblick über die Sammlung
 Dashboard mit Themen-Landkarte der ganzen Bibliothek, Dubletten-Finder, BibTeX-Export,
-Filter nach Sammlung, Tag, Typ und Jahr, Gruppenbibliotheken.
+Sammlungsbaum wie in Zotero (Untersammlungen inklusive), Filter nach Tag, Typ und Jahr, Gruppenbibliotheken.
 
 <img src="docs/images/dashboard.png" alt="Dashboard mit Kennzahlen und Themen-Landkarte der Bibliothek" width="100%">
 
@@ -310,6 +310,7 @@ python -m venv .venv          # Python 3.11; macOS/Linux: .venv/bin/python statt
 | `plugin/` | Zotero-Plugin; `python plugin/build.py` baut die `.xpi` |
 | `installer/` | Windows-Installer (Inno Setup), gebaut von der CI |
 | `eval/` | Testfragen und Messskript für die Suchqualität |
+| `tools/` | `screenshots.py` erneuert die README-Bilder (laufender Server, Edge oder Chrome) |
 | `tests/` | pytest, läuft in der CI auf Windows, macOS und Linux |
 
 **Release:** Version in `plugin/src/manifest.json` erhöhen, Eintrag in `plugin/updates.json`
