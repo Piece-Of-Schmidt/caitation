@@ -21,15 +21,18 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 
 ## 2. Entscheidungen
 
-- [ ] **Lizenz.** PyMuPDF (PDF-Text) steht unter der AGPL-3.0. Entweder Caitation selbst
-      unter AGPL-3.0 veröffentlichen, oder PyMuPDF durch eine freizügig lizenzierte
-      Bibliothek ersetzen (z.B. `pypdfium2`) und dann frei wählen (MIT/Apache-2.0).
-- [ ] **Architektur.** Zotero-Plugins sind JavaScript; Python, PyTorch und die Modelle
-      passen nicht hinein. Empfehlung: Zotero-Plugin als Oberfläche plus die bestehende
-      Python-App als lokal rechnende Begleit-App. Daten bleiben auf dem eigenen Rechner.
-- [ ] **Zugriff auf Zotero** über offizielle Schnittstellen (Plugin-API bzw. die lokale
-      API von Zotero 7) statt die Datenbankdatei zu kopieren; Zotero rät von direktem
-      Datenbankzugriff ab, weil sich das Schema ändern kann.
+- [x] **Lizenz: MIT** (2026-10-01). Dafür wurde PyMuPDF (AGPL) durch `pypdfium2`
+      (BSD-3-Clause/Apache-2.0) ersetzt. Vergleich an 41 PDFs: 97,8 % identische Wörter,
+      Ligaturen und Akzente werden sogar sauberer ausgelesen.
+- [x] **Architektur: Zotero-Plugin + lokale Begleit-App** (2026-10-01). Das Plugin
+      (`plugin/`, Zotero 8/9) ist die Oberfläche in Zotero; die Python-App rechnet lokal.
+- [ ] **Plugin in echtem Zotero testen** (bisher nur gebaut, Syntax und Paket geprüft).
+- [ ] **Update-Adresse des Plugins** zeigt auf ein noch nicht existierendes
+      GitHub-Repository (`Piece-Of-Schmidt/caitation`); beim Veröffentlichen anlegen und
+      `plugin/updates.json` bereitstellen. Plugin-ID: `caitation@piece-of-schmidt`.
+- [ ] **Zugriff auf Zotero** über offizielle Schnittstellen (Plugin-API bzw. lokale API)
+      statt die Datenbankdatei zu kopieren; Zotero rät von direktem Datenbankzugriff ab,
+      weil sich das Schema ändern kann.
 
 ## 3. Lücken bei fremden Bibliotheken
 

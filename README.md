@@ -68,6 +68,28 @@ Der Server ist nur vom eigenen Rechner aus erreichbar und weist Anfragen anderer
 ab (Schutz gegen Cross-Site-Anfragen und DNS-Rebinding, siehe `backend/security.py`).
 Öffne die Oberfläche deshalb über `127.0.0.1` oder `localhost`.
 
+## Zotero-Plugin
+
+Das Plugin „Caitation for Zotero" (Zotero 8 und 9) holt Caitation direkt in Zotero:
+
+- **Seitenleiste am Eintrag:** Abschnitt „Ähnliche Paper (Caitation)"; ein Klick springt
+  zum Eintrag.
+- **PDF-Reader:** Text markieren → „In Caitation suchen" oder „Beleg prüfen".
+- **Menüs:** „Caitation öffnen" unter *Werkzeuge*, „Ähnliche Paper in Caitation" im
+  Rechtsklick-Menü eines Eintrags.
+
+Das Plugin rechnet nicht selbst, es braucht die laufende Caitation-App (siehe oben).
+
+Installation:
+
+1. Paket bauen: `.venv\Scripts\python.exe plugin\build.py` → `dist\caitation-zotero-<version>.xpi`
+2. In Zotero: *Werkzeuge → Plugins*, Zahnrad-Symbol → *Plugin aus Datei installieren…* und
+   die `.xpi`-Datei wählen.
+
+Läuft Caitation nicht unter `http://127.0.0.1:8000`, lässt sich die Adresse im
+Konfigurationseditor von Zotero (*Einstellungen → Erweitert → Konfigurationseditor*) über
+`extensions.caitation.serverURL` ändern.
+
 ## Entwicklung
 
 ```

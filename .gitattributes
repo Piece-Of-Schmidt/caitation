@@ -1,0 +1,5 @@
+# Normalize line endings in the repository (LF), whatever the local OS uses
+* text=auto
+*.bat text eol=crlf
+*.svg text
+*.xpi binary
