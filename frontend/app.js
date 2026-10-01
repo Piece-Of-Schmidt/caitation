@@ -323,11 +323,22 @@ const annotationsOnly = $("#annotationsOnly");
 
 // selections made in the collection tree and the tag selector
 const treeFilter = { library: "", collection: "", tag: "" };
-let filterOptions = { libraries: [], collections: [], tags: [] };
+let filterOptions = { libraries: [], collections: [], tree: [], tags: [] };
+
+// expanded collections in the tree, remembered like in Zotero
+const expanded = new Set(JSON.parse(storage.get("caitation.expanded") || "[]"));
+function saveExpanded() {
+  storage.set("caitation.expanded", JSON.stringify([...expanded]));
+}
+
+function collectionName(key) {
+  // keys from the tree; plain names come from dashboard shortcuts
+  return filterOptions.tree.find((c) => c.key === key)?.name || key;
+}
 
 const FILTER_LABELS = {
   library: (v) => v,
-  collection: (v) => `Sammlung: ${v}`,
+  collection: (v) => `Sammlung: ${collectionName(v)}`,
   tag: (v) => `Tag: ${v}`,
   item_type: (v) => typeLabel(v),
   year_from: (v) => `ab ${v}`,
@@ -375,20 +386,50 @@ function filtersChanged() {
 }
 
 function renderTree() {
-  const row = (kind, value, label, iconName, child = false) => {
+  const row = (kind, value, label, iconName, depth, twisty = "") => {
     const selected = kind === "all"
       ? !treeFilter.library && !treeFilter.collection
       : treeFilter[kind] === value;
-    return `<button type="button" class="tree-row${child ? " is-child" : ""}" role="treeitem"
-      aria-selected="${selected}" data-tree="${kind}" data-value="${escapeHtml(value)}" title="${escapeHtml(label)}">
-      ${icon(iconName)}<span>${escapeHtml(label)}</span></button>`;
+    return `<button type="button" class="tree-row" role="treeitem" style="--depth:${depth}"
+      aria-selected="${selected}" ${twisty ? `aria-expanded="${twisty === "open"}"` : ""}
+      data-tree="${kind}" data-value="${escapeHtml(value)}" title="${escapeHtml(label)}">
+      <span class="twisty${twisty ? "" : " is-leaf"}" data-twisty="${escapeHtml(value)}">${twisty ? icon("twisty") : ""}</span>
+      ${icon(iconName)}<span class="tree-label">${escapeHtml(label)}</span></button>`;
   };
-  const libraries = filterOptions.libraries;
-  const rows = [row("all", "", libraries.length > 1 ? "Alle Bibliotheken" : "Meine Bibliothek", "library")];
-  if (libraries.length > 1) {
-    for (const lib of libraries) rows.push(row("library", lib, lib, lib === "Meine Bibliothek" ? "library" : "group", true));
+
+  // collection hierarchy (flat list of names if the library was stored by an older version)
+  const tree = filterOptions.tree;
+  const children = new Map();
+  for (const c of tree) {
+    if (!children.has(c.parent)) children.set(c.parent, []);
+    children.get(c.parent).push(c);
   }
-  for (const c of filterOptions.collections) rows.push(row("collection", c, c, "folder", true));
+  for (const list of children.values()) list.sort((a, b) => a.name.localeCompare(b.name, "de"));
+  // keep the selected collection visible: open its parents
+  for (let c = tree.find((x) => x.key === treeFilter.collection); c?.parent; c = tree.find((x) => x.key === c.parent)) {
+    expanded.add(c.parent);
+  }
+  const collectionRows = (parentKey, library, depth) => (children.get(parentKey) || [])
+    .filter((c) => c.library === library)
+    .flatMap((c) => {
+      const hasChildren = children.has(c.key);
+      const open = hasChildren && expanded.has(c.key);
+      return [row("collection", c.key, c.name, "folder", depth, hasChildren ? (open ? "open" : "closed") : ""),
+        ...(open ? collectionRows(c.key, library, depth + 1) : [])];
+    });
+
+  const libraries = filterOptions.libraries;
+  const rows = [row("all", "", libraries.length > 1 ? "Alle Bibliotheken" : "Meine Bibliothek", "library", 0)];
+  if (!tree.length) {
+    for (const c of filterOptions.collections) rows.push(row("collection", c, c, "folder", 1));
+  } else if (libraries.length > 1) {
+    for (const lib of libraries) {
+      rows.push(row("library", lib, lib, lib === "Meine Bibliothek" ? "library" : "group", 1));
+      rows.push(...collectionRows(null, lib, 2));
+    }
+  } else {
+    rows.push(...collectionRows(null, libraries[0] || "Meine Bibliothek", 1));
+  }
   els.collectionTree.innerHTML = rows.join("");
 }
 
@@ -404,6 +445,15 @@ function renderTags() {
 }
 
 els.collectionTree.addEventListener("click", (e) => {
+  const twisty = e.target.closest(".twisty:not(.is-leaf)");
+  if (twisty) {
+    const key = twisty.dataset.twisty;
+    if (expanded.has(key)) expanded.delete(key);
+    else expanded.add(key);
+    saveExpanded();
+    renderTree();
+    return;
+  }
   const row = e.target.closest("[data-tree]");
   if (!row) return;
   const { tree: kind, value } = row.dataset;
@@ -452,6 +502,7 @@ async function loadFilters() {
     filterOptions = {
       libraries: data.libraries || [],
       collections: [...data.collections].sort((a, b) => a.localeCompare(b, "de")),
+      tree: data.collection_tree || [],
       tags: [...data.tags].sort((a, b) => a.localeCompare(b, "de")),
     };
     const typeSel = FILTER_FIELDS.item_type;
@@ -495,9 +546,54 @@ const EMPTY_TITLES = {
   evidence: "Prüfe eine Behauptung",
 };
 
+const PLUGIN_URL = "https://github.com/Piece-Of-Schmidt/caitation/releases/latest";
+
+// First start: nothing read from Zotero yet. Explains the one next step instead of
+// offering example searches that cannot find anything.
+function setupCard() {
+  const zotero = serverStatus.zotero || {};
+  const steps = {
+    disabled: {
+      title: "Noch ein Schritt: Zugriff auf Zotero erlauben",
+      body: `<p>Caitation liest deine Bibliothek über Zoteros lokale Schnittstelle – nur lesend und nur
+        von diesem Computer aus. Die ist in Zotero noch ausgeschaltet.</p>
+        <ol>
+          <li><strong>Mit Plugin (empfohlen):</strong> <a href="${PLUGIN_URL}" target="_blank" rel="noopener">Caitation-Plugin
+            herunterladen</a> und in Zotero über <em>Werkzeuge → Plugins → Zahnrad → Plugin aus Datei installieren…</em>
+            hinzufügen. Es fragt dann nach dem Zugriff: <em>Erlauben</em>.</li>
+          <li><strong>Ohne Plugin:</strong> in Zotero unter <em>Einstellungen → Erweitert</em> die Kommunikation mit
+            anderen Anwendungen auf diesem Computer erlauben.</li>
+        </ol>
+        <p class="muted">Caitation merkt die Freigabe innerhalb einer Minute und beginnt dann von selbst.</p>`,
+    },
+    closed: {
+      title: "Bitte Zotero öffnen",
+      body: `<p>Caitation liest deine Bibliothek, sobald Zotero läuft, und beginnt dann von selbst mit dem Einlesen.</p>`,
+    },
+    error: {
+      title: "Zotero antwortet nicht wie erwartet",
+      body: `<p>${escapeHtml(zotero.message || "")}</p>`,
+    },
+  };
+  const step = steps[zotero.state] || (serverStatus.running
+    ? {
+      title: "Deine Bibliothek wird eingelesen",
+      body: `<p>Titel, Abstracts und Highlights sind in wenigen Minuten durchsuchbar, die Volltexte folgen im
+        Hintergrund. Den Fortschritt zeigt die Anzeige oben rechts; du kannst die Seite einfach offen lassen.</p>`,
+    }
+    : { title: "Verbinde mit Zotero…", body: "" });
+  return `<div class="empty-state setup-card"><h2>${step.title}</h2>${step.body}</div>`;
+}
+
 function renderEmptyState() {
   const mode = currentMode();
   const cfg = MODES[mode];
+  els.results.dataset.view = "empty";
+  if (serverStatus.libraryItems === 0) {
+    els.results.innerHTML = setupCard();
+    renderItemPane(null);
+    return;
+  }
   els.results.innerHTML = `
     <div class="empty-state">
       <h2>${EMPTY_TITLES[mode]}</h2>
@@ -510,6 +606,7 @@ function renderEmptyState() {
 }
 
 function renderSkeleton(note = "") {
+  els.results.dataset.view = "";
   const row = `
     <div class="skeleton-row">
       <div></div>
@@ -523,6 +620,7 @@ function renderSkeleton(note = "") {
 }
 
 function renderError(err) {
+  els.results.dataset.view = "";
   els.results.innerHTML = `
     <div class="notice notice-error" role="alert">
       <strong>Das hat nicht geklappt.</strong> ${escapeHtml(err.message || String(err))}
@@ -554,6 +652,7 @@ function resultRow(r, index, terms) {
 
 function renderResults(results, { title = "Treffer", terms = [], preview = false, back = false, keepSelection = false } = {}) {
   state.hasResults = true;
+  els.results.dataset.view = "";
   const previousKey = keepSelection ? state.results[state.selected]?.item_key : null;
   state.results = results;
   state.terms = terms;
@@ -1297,7 +1396,21 @@ async function loadDuplicates() {
 
 /* ================================================================ index status */
 
-const serverStatus = { ready: false, running: false, polling: false };
+const serverStatus = { ready: false, running: false, libraryVersion: null };
+// Idle polling notices reindexes the server starts by itself when Zotero changed.
+const POLL_BUSY_MS = 1500;
+const POLL_IDLE_MS = 15000;
+const POLL_HIDDEN_MS = 60000;
+let pollTimer = 0;
+
+function schedulePoll(ms) {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(pollStatus, ms);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) schedulePoll(0);
+});
 
 function setPill(stateName, text, title = "") {
   els.statusPill.dataset.state = stateName;
@@ -1319,14 +1432,13 @@ function remainingTime(seconds) {
 }
 
 async function pollStatus() {
-  serverStatus.polling = true;
   let s;
   try {
     s = await api("/api/reindex/status");
   } catch {
     setPill("error", "Server nicht erreichbar");
     els.progress.hidden = true;
-    setTimeout(pollStatus, 5000);
+    schedulePoll(5000);
     return;
   }
   const wasRunning = serverStatus.running;
@@ -1349,25 +1461,37 @@ async function pollStatus() {
     if (s.status === "error") {
       setPill("error", "Indexierung fehlgeschlagen", `${s.current} – Details in data/caitation.log`);
     } else if (!s.ready) setPill("loading", "Modelle laden…", "Such- und Ranking-Modelle werden einmalig geladen");
-    else if (s.warning) setPill("warning", "Bereit", s.warning);
-    else setPill("ready", "Bereit", s.note || (s.status === "done" ? "Index ist aktuell" : "Bereit"));
-    if (wasRunning && s.status === "done") {
-      toast("Index aktualisiert");
-      views.loaded.dashboard = false;
-      views.loaded.duplicates = false;
-      loadFilters();
+    else if (s.warning) {
+      const label = { disabled: "Kein Zugriff auf Zotero", closed: "Zotero geschlossen" }[s.zotero?.state] || "Bereit";
+      setPill("warning", label, s.warning);
     }
+    else setPill("ready", "Bereit", s.note || (s.status === "done" ? "Index ist aktuell" : "Bereit"));
+    if (wasRunning && s.status === "done") toast("Index aktualisiert");
   }
+  // the stored library changed (also by a short update between two polls): refresh
+  // everything derived from it
+  if (serverStatus.libraryVersion !== null && s.library_version !== serverStatus.libraryVersion) {
+    views.loaded.dashboard = false;
+    views.loaded.duplicates = false;
+    loadFilters();
+  }
+  serverStatus.libraryVersion = s.library_version;
 
-  if (s.running || !s.ready) setTimeout(pollStatus, 1500);
-  else serverStatus.polling = false;
+  // the empty search page follows the setup state (access granted, Zotero opened, …)
+  const setupKey = `${s.library_items}|${s.zotero?.state}|${s.running}`;
+  serverStatus.libraryItems = s.library_items;
+  serverStatus.zotero = s.zotero;
+  if (setupKey !== serverStatus.setupKey && els.results.dataset.view === "empty") renderEmptyState();
+  serverStatus.setupKey = setupKey;
+
+  schedulePoll(s.running || !s.ready ? POLL_BUSY_MS : document.hidden ? POLL_HIDDEN_MS : POLL_IDLE_MS);
 }
 
 els.reindexBtn.addEventListener("click", async () => {
   try {
     const data = await api("/api/reindex", { method: "POST" });
     toast(data.started ? "Indexierung gestartet – nur geänderte Einträge werden verarbeitet" : data.message);
-    if (!serverStatus.polling) setTimeout(pollStatus, 300);
+    schedulePoll(300);
   } catch (err) {
     toast(err.message);
   }

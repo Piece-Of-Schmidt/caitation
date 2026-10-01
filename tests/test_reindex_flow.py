@@ -37,7 +37,7 @@ def library(tmp_path, monkeypatch, make_item):
                   annotations=[{"text": "prices matter most", "comment": "", "page": 3}]),
         make_item(key="BBBB2222", title="Monetary policy in the media", documents=[page]),
     ]
-    monkeypatch.setattr(indexer.zotero_api, "read_items", lambda: (items, {"users/0": 7}))
+    monkeypatch.setattr(indexer.zotero_api, "read_library", lambda: (items, {"users/0": 7}, []))
     return items
 
 
@@ -74,7 +74,7 @@ def test_removed_and_changed_items_are_updated(library, monkeypatch, make_item):
     indexer.run_reindex()
     changed = make_item(key="AAAA1111", title="Inflation expectations of households", abstract="Survey evidence.")
     # highlight removed, BBBB deleted
-    monkeypatch.setattr(indexer.zotero_api, "read_items", lambda: ([changed], {"users/0": 8}))
+    monkeypatch.setattr(indexer.zotero_api, "read_library", lambda: ([changed], {"users/0": 8}, []))
 
     indexer.run_reindex()
 

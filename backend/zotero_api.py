@@ -164,6 +164,9 @@ def build_items(objects: list[dict], collections: list[dict], library: dict, res
     collection_names = {c["key"]: c.get("data", c).get("name", "") for c in collections}
     group_id = library["group_id"]
 
+    def qualify(key: str) -> str:
+        return f"g{group_id}:{key}" if group_id else key
+
     items = []
     for d in live:
         if d["itemType"] in ("attachment", "note", "annotation"):
@@ -184,7 +187,7 @@ def build_items(objects: list[dict], collections: list[dict], library: dict, res
             key=lambda a: a.get("annotationSortIndex", ""),
         )
         items.append(ZoteroItem(
-            key=f"g{group_id}:{d['key']}" if group_id else d["key"],
+            key=qualify(d["key"]),
             zotero_key=d["key"],
             group_id=group_id,
             library_name=library["name"],
@@ -201,6 +204,7 @@ def build_items(objects: list[dict], collections: list[dict], library: dict, res
             pdf_paths=pdfs,
             documents=documents,
             collections=[collection_names[k] for k in d.get("collections", []) if k in collection_names],
+            collection_keys=[qualify(k) for k in d.get("collections", []) if k in collection_names],
             annotations=[
                 {"text": (a.get("annotationText") or "").strip(),
                  "comment": (a.get("annotationComment") or "").strip(),
@@ -217,9 +221,24 @@ def build_items(objects: list[dict], collections: list[dict], library: dict, res
     return items
 
 
-def read_items() -> tuple[list[ZoteroItem], dict[str, int]]:
-    """Every item of every library, and each library's version at the time of reading."""
-    items, versions = [], {}
+def build_collections(collections: list[dict], library: dict) -> list[dict]:
+    """The collection tree of one library: [{key, name, parent, library}], keys qualified."""
+    prefix = f"g{library['group_id']}:" if library["group_id"] else ""
+    tree = []
+    for c in collections:
+        data = c.get("data", c)
+        if data.get("deleted"):
+            continue
+        parent = data.get("parentCollection") or None
+        tree.append({"key": prefix + data["key"], "name": data.get("name", ""),
+                     "parent": prefix + parent if parent else None, "library": library["name"]})
+    return tree
+
+
+def read_library() -> tuple[list[ZoteroItem], dict[str, int], list[dict]]:
+    """Every item of every library, each library's version at the time of reading, and the
+    collection tree."""
+    items, versions, tree = [], {}, []
     resolve = _FileResolver()
     for lib in libraries():
         # the local API returns all objects in one response (no paging), without the trash
@@ -227,4 +246,10 @@ def read_items() -> tuple[list[ZoteroItem], dict[str, int]]:
         collections, _ = _get_json(f"{lib['prefix']}/collections")
         versions[lib["prefix"]] = int(_header(headers, "Last-Modified-Version") or 0)
         items += build_items(objects, collections, lib, resolve)
+        tree += build_collections(collections, lib)
+    return items, versions, tree
+
+
+def read_items() -> tuple[list[ZoteroItem], dict[str, int]]:
+    items, versions, _tree = read_library()
     return items, versions

@@ -18,6 +18,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m backend", description="Caitation-Server")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--reload", action="store_true", help="bei Codeänderungen neu starten")
+    parser.add_argument("--access-log", action="store_true", help="jede Anfrage im Fenster protokollieren")
     args = parser.parse_args()
     uvicorn.run(
         "backend.main:app",
@@ -25,6 +26,9 @@ def main() -> None:
         port=args.port,
         reload=args.reload,
         loop="backend.__main__:selector_loop",
+        # off by default: the page polls the status regularly, which would fill the window
+        # colleagues keep open with request lines; errors and timings are still logged
+        access_log=args.access_log,
     )
 
 

@@ -548,14 +548,14 @@ def _flush_fts(fts_changes: dict, state: dict) -> None:
 
 def run_reindex() -> None:
     _progress.update(status="running", phase="", done=0, total=0, current="Lese Zotero-Bibliothek...")
-    items, versions = zotero_api.read_items()  # raises ZoteroUnavailable if Zotero is closed
+    items, versions, collections = zotero_api.read_library()  # ZoteroUnavailable if closed
     _incomplete_marker().touch()
     state = _load_state()
     if any(entry.get("v") != HASH_VERSION for entry in state.values()):
         _progress.update(current="Übernehme unveränderte Einträge...")
         _migrate_state(state, items, config.DB_SNAPSHOT)
         _save_state(state)
-    library.save(items, versions)
+    library.save(items, versions, collections)
 
     client = chromadb.PersistentClient(path=str(config.CHROMA_DIR))
     collection = client.get_or_create_collection(

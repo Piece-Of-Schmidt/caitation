@@ -12,7 +12,7 @@ from pathlib import Path
 from backend import config
 
 LIBRARY_FILE = config.DATA_DIR / "library.json"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2  # 2: collection hierarchy, collection keys per item
 
 
 @dataclass
@@ -28,7 +28,9 @@ class ZoteroItem:
     pdf_paths: list[Path] = field(default_factory=list)
     # other full-text attachments: web page snapshots (HTML), EPUBs, plain text
     documents: list[Path] = field(default_factory=list)
-    collections: list[str] = field(default_factory=list)
+    collections: list[str] = field(default_factory=list)  # names, for display and stats
+    # keys of the item's collections, qualified like item keys ("g<groupID>:<KEY>" in groups)
+    collection_keys: list[str] = field(default_factory=list)
     annotations: list[dict] = field(default_factory=list)  # {text, comment, page}
     publication: str = ""
     doi: str = ""
@@ -71,9 +73,11 @@ def _from_json(data: dict) -> ZoteroItem:
     return ZoteroItem(**data)
 
 
-def save(items: list[ZoteroItem], versions: dict[str, int]) -> None:
-    """Writes the library atomically (readers never see a half-written file)."""
-    payload = {"format": FORMAT_VERSION, "versions": versions, "items": [_to_json(i) for i in items]}
+def save(items: list[ZoteroItem], versions: dict[str, int], collections: list[dict] | None = None) -> None:
+    """Writes the library atomically (readers never see a half-written file).
+    collections: [{key, name, parent, library}] with qualified keys, parent None at top."""
+    payload = {"format": FORMAT_VERSION, "versions": versions, "collections": collections or [],
+               "items": [_to_json(i) for i in items]}
     tmp = LIBRARY_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, LIBRARY_FILE)
@@ -87,13 +91,14 @@ def _load() -> dict:
     try:
         mtime = LIBRARY_FILE.stat().st_mtime
     except OSError:
-        return {"versions": {}, "items": {}}
+        return {"versions": {}, "items": {}, "collections": [], "format": FORMAT_VERSION}
     with _cache_lock:
         if _cache.get("mtime") != mtime:
             payload = json.loads(LIBRARY_FILE.read_text(encoding="utf-8"))
             items = [_from_json(d) for d in payload.get("items", [])]
             _cache.update(mtime=mtime, versions=payload.get("versions", {}),
-                          items={i.key: i for i in items})
+                          items={i.key: i for i in items}, collections=payload.get("collections", []),
+                          format=payload.get("format", 1))
         return _cache
 
 
@@ -105,6 +110,30 @@ def items_by_key() -> dict[str, ZoteroItem]:
 def versions() -> dict[str, int]:
     """Zotero's library version per library ("users/0", "groups/<id>") at the last read."""
     return dict(_load()["versions"])
+
+
+def collections() -> list[dict]:
+    """The collection tree: [{key, name, parent, library}]."""
+    return list(_load()["collections"])
+
+
+def outdated() -> bool:
+    """Stored by an older Caitation that kept less information: read Zotero again."""
+    return bool(LIBRARY_FILE.exists()) and _load()["format"] < FORMAT_VERSION
+
+
+def collection_with_descendants(key: str) -> set[str]:
+    """A collection key plus the keys of all collections below it."""
+    children: dict[str | None, list[str]] = {}
+    for c in collections():
+        children.setdefault(c["parent"], []).append(c["key"])
+    found, todo = set(), [key]
+    while todo:
+        current = todo.pop()
+        if current not in found:
+            found.add(current)
+            todo.extend(children.get(current, []))
+    return found
 
 
 def mtime() -> float:

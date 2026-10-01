@@ -365,10 +365,14 @@ input, select, button, textarea { font: inherit; color: inherit; }
   overflow: hidden;
 }
 
-.tree-row span { overflow: hidden; text-overflow: ellipsis; }
+.tree-row { padding-left: calc(2px + var(--depth, 0) * 16px); }
+.tree-label { overflow: hidden; text-overflow: ellipsis; }
+.twisty { display: inline-flex; flex: none; width: 12px; justify-content: center; color: var(--fill-secondary); }
+.twisty .icon { width: 10px; height: 10px; color: inherit; transition: transform 0.12s ease; }
+.tree-row[aria-expanded="true"] .twisty .icon { transform: rotate(90deg); }
+.sidepane:focus-within .tree-row[aria-selected="true"] .twisty { color: #fff; }
 .tree-row .icon { color: var(--accent-blue); }
 .tree-row:hover { background: var(--fill-quinary); }
-.tree-row.is-child { padding-left: 24px; }
 .tree-row[aria-selected="true"] { background: var(--fill-quarternary); }
 .sidepane:focus-within .tree-row[aria-selected="true"] { background: var(--accent-blue); color: #fff; }
 .sidepane:focus-within .tree-row[aria-selected="true"] .icon { color: #fff; }
@@ -1099,3 +1103,10 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* first start: what to do next */
+.setup-card { align-items: stretch; max-width: 600px; margin: 0 auto; text-align: left; }
+.setup-card h2 { text-align: center; }
+.setup-card p { max-width: none; margin: 6px 0; }
+.setup-card ol { margin: 8px 0; padding-left: 20px; display: grid; gap: 8px; }
+.setup-card .muted { color: var(--fill-secondary); }

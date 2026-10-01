@@ -5,6 +5,12 @@ def test_normalize_title_ignores_case_punctuation_and_boilerplate():
     assert normalize_title("Original Article: The Euro-Crisis!") == normalize_title("the euro crisis")
 
 
+def test_web_page_titles_lose_the_site_name():
+    article = normalize_title("Narratives about the Macroeconomy")
+    assert normalize_title("Narratives about the Macroeconomy | Publications | CESifo") == article
+    assert normalize_title("Short | Site name that is long") != normalize_title("Short")  # head too short
+
+
 def test_groups_merge_doi_and_title_matches(make_item):
     items = {
         "A": make_item(key="A", title="Monetary policy in the media", doi="10.1/x"),

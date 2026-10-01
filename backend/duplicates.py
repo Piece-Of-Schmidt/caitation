@@ -9,8 +9,15 @@ from backend.library import ZoteroItem
 _TITLE_PREFIXES = re.compile(r"^(full article|original article|research article)\s*[:\-]?\s*", re.IGNORECASE)
 
 
+# site names that saved web pages append: "Narratives about the Macroeconomy | Publications | CESifo"
+_SITE_SUFFIX = re.compile(r"\s+[|·]\s+")
+
+
 def normalize_title(title: str) -> str:
     title = _TITLE_PREFIXES.sub("", title.strip())
+    head = _SITE_SUFFIX.split(title, maxsplit=1)[0]
+    if len(head) >= 15:
+        title = head
     title = re.sub(r"[^a-z0-9äöüß ]", " ", title.lower())
     return re.sub(r"\s+", " ", title).strip()
 

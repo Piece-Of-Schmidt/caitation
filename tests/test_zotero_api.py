@@ -70,7 +70,10 @@ def _library(storage):
     return {
         "users/0/groups": [{"id": 42, "data": {"id": 42, "name": "Lehrstuhl"}}],
         "users/0/items": items,
-        "users/0/collections": [{"key": "COLL0001", "data": {"key": "COLL0001", "name": "Narrative"}}],
+        "users/0/collections": [
+            {"key": "COLL0001", "data": {"key": "COLL0001", "name": "Narrative", "parentCollection": False}},
+            {"key": "COLL0002", "data": {"key": "COLL0002", "name": "Inflation", "parentCollection": "COLL0001"}},
+        ],
         "groups/42/items": group_items,
         "groups/42/collections": [],
         **files,
@@ -114,15 +117,20 @@ def test_reads_items_attachments_highlights_and_groups(fake_zotero, storage):
     root, linked = storage
     fake_zotero["routes"] = _library(storage)
 
-    items, versions = zotero_api.read_items()
+    items, versions, tree = zotero_api.read_library()
 
     assert versions == {"users/0": 123, "groups/42": 9}
+    assert tree == [
+        {"key": "COLL0001", "name": "Narrative", "parent": None, "library": "Meine Bibliothek"},
+        {"key": "COLL0002", "name": "Inflation", "parent": "COLL0001", "library": "Meine Bibliothek"},
+    ]
     by_key = {i.key: i for i in items}
     assert set(by_key) == {"ITEM0001", "g42:GRPITEM1"}  # no notes, attachments, trash
     item = by_key["ITEM0001"]
     assert item.creators == ["Robert Shiller", "OECD"]
     assert item.tags == ["economics", "media"]
     assert item.collections == ["Narrative"]
+    assert item.collection_keys == ["COLL0001"]
     assert item.notes == ["<p>my note</p>"]
     assert item.pdf_paths == [root / "ATTPDF01" / "paper.pdf", linked]  # trashed PDF left out
     assert item.documents == [root / "ATTWEB01" / "page.html"]

@@ -69,7 +69,7 @@ def _zotero_changed() -> bool:
 
 def _watch_zotero(stop: threading.Event) -> None:
     # an interrupted run or a pending text repair resumes as soon as Zotero is readable
-    resume = indexer.reindex_incomplete() or indexer.needs_text_repair()
+    resume = indexer.reindex_incomplete() or indexer.needs_text_repair() or library.outdated()
     while not stop.is_set():
         try:
             changed = _zotero_changed()
@@ -221,6 +221,7 @@ def api_filters():
         "item_types": sorted(types),
         "tags": sorted(tags),
         "collections": sorted(collections),
+        "collection_tree": library.collections(),
         "libraries": sorted(libraries),
         "year_min": min(years) if years else None,
         "year_max": max(years) if years else None,
@@ -249,6 +250,8 @@ def api_reindex_status():
     progress["ready"] = rag.is_ready()
     progress["device"] = DEVICE
     progress["zotero"] = dict(_zotero)
+    progress["library_version"] = library.mtime()  # changes whenever the stored library does
+    progress["library_items"] = len(library.items_by_key())
     # no access at all, or nothing indexed yet: worth a warning; Zotero merely closed
     # while a stored library exists: just a note (search keeps working)
     unavailable = _zotero["state"] in ("closed", "disabled", "error")

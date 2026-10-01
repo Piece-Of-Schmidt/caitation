@@ -206,6 +206,13 @@ def _clip(text: str, limit: int) -> str:
     return text[:limit].rsplit(" ", 1)[0].rstrip(",;:") + " …"
 
 
+def _in_collection(item: ZoteroItem, collection: str) -> bool:
+    """collection: a key from the collection tree (its subcollections count too) or, as
+    used by the dashboard, a collection name."""
+    keys = library.collection_with_descendants(collection)
+    return bool(keys & set(item.collection_keys)) or collection in item.collections
+
+
 def _passes_filters(item: ZoteroItem | None, filters: dict) -> bool:
     if item is None:
         return not filters
@@ -217,7 +224,7 @@ def _passes_filters(item: ZoteroItem | None, filters: dict) -> bool:
         return False
     if filters.get("tag") and filters["tag"] not in item.tags:
         return False
-    if filters.get("collection") and filters["collection"] not in item.collections:
+    if filters.get("collection") and not _in_collection(item, filters["collection"]):
         return False
     if filters.get("library") and filters["library"] != item.library_name:
         return False
