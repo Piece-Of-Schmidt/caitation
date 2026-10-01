@@ -680,6 +680,10 @@ function quoteSource(q) {
   return `${plainTitle(q.title) || "Quelle"}${q.page ? `, S. ${q.page}` : ""}`;
 }
 
+function pageWarning(q) {
+  return q.page_mismatch ? `Seitenangabe prüfen: zitiert S. ${q.cited_page}, im Quelltext ab S. ${q.page}` : "";
+}
+
 // Marks each checked quote inside the rendered answer (when it sits in one text node).
 function markQuotes(root, checks) {
   for (const q of checks) {
@@ -694,7 +698,7 @@ function markQuotes(root, checks) {
       range.setEnd(node, at + q.quote.length);
       const span = document.createElement("span");
       span.className = `quote-check ${status.cls}`;
-      span.title = `Zitat ${status.label}${quoteSource(q) ? ` – ${quoteSource(q)}` : ""}`;
+      span.title = [`Zitat ${status.label}`, quoteSource(q), pageWarning(q)].filter(Boolean).join(" – ");
       range.surroundContents(span);
       // badge after the closing quotation mark, so the mark never wraps onto its own line
       let anchor = span;
@@ -716,7 +720,8 @@ function markQuotes(root, checks) {
 function quoteSummary(checks) {
   const counts = { verified: 0, deviates: 0, not_found: 0 };
   for (const q of checks) counts[q.status] += 1;
-  const allGood = counts.verified === checks.length;
+  const pageIssues = checks.filter((q) => q.page_mismatch).length;
+  const allGood = counts.verified === checks.length && !pageIssues;
   const box = document.createElement("details");
   box.className = `quote-summary ${allGood ? "is-verified" : counts.not_found ? "is-missing" : "is-deviates"}`;
   box.open = !allGood;
@@ -724,13 +729,15 @@ function quoteSummary(checks) {
   if (counts.verified) parts.push(`${counts.verified} wörtlich belegt`);
   if (counts.deviates) parts.push(`${counts.deviates} abweichend`);
   if (counts.not_found) parts.push(`${counts.not_found} nicht gefunden`);
+  if (pageIssues) parts.push(`${pageIssues}× Seitenangabe prüfen`);
   box.innerHTML = `
     <summary>Zitatprüfung: ${parts.join(" · ")}</summary>
     <ul>${checks.map((q) => {
       const status = QUOTE_STATUS[q.status];
       const text = q.quote.length > 110 ? `${q.quote.slice(0, 107)}…` : q.quote;
       return `<li><span class="quote-badge ${status.cls}" aria-label="${status.label}">${status.mark}</span>
-        „${escapeHtml(text)}"<span class="quote-src">${escapeHtml(quoteSource(q) || status.label)}</span></li>`;
+        „${escapeHtml(text)}"<span class="quote-src">${escapeHtml(quoteSource(q) || status.label)}</span>
+        ${pageWarning(q) ? `<span class="quote-src quote-page-warning">${escapeHtml(pageWarning(q))}</span>` : ""}</li>`;
     }).join("")}</ul>
     ${counts.not_found ? '<p class="quote-hint">Nicht gefundene Zitate vor dem Übernehmen unbedingt im PDF prüfen.</p>' : ""}`;
   return box;

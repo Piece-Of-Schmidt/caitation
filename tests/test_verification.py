@@ -67,3 +67,19 @@ def test_invented_quote_is_not_found():
 
 def test_answers_without_quotes_yield_nothing():
     assert check("Die Quelle stützt die Behauptung (Kotenidis & Veglis, 2021, S. 4).") == []
+
+
+def test_cited_page_is_compared_with_the_source_page():
+    quote = "„Those advantages also seem to coincide with the increasingly high market demands“"
+    correct, wrong = (check(f"{quote} (Kotenidis & Veglis, 2021, S. {p})")[0] for p in (4, 12))
+    assert (correct["cited_page"], correct["page_mismatch"]) == (4, False)
+    assert (wrong["cited_page"], wrong["page_mismatch"]) == (12, True)
+    assert check(f"{quote} (Kotenidis & Veglis, 2021)")[0]["cited_page"] is None
+
+
+def test_page_reference_of_the_next_quote_is_not_borrowed():
+    answer = ("„Those advantages also seem to coincide with the increasingly high market demands“ und "
+              "„making algorithmic news production even more beneficial“ (S. 9)")
+    first, second = check(answer)
+    assert first["cited_page"] is None
+    assert second["cited_page"] == 9

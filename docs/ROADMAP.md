@@ -56,7 +56,8 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 - [x] **Automatische Zitatprüfung im Beleg- und Frage-Modus** (2026-10-01): jedes
       wörtliche Zitat wird als „wörtlich belegt", „abweichend" oder „nicht gefunden"
       markiert, mit Quelle und Seite (`backend/verification.py`).
-- [ ] Zitatprüfung: zitierte Seitenzahl (z.B. „S. 4") mit der Fundstelle abgleichen.
+- [x] Zitatprüfung gleicht die zitierte Seitenzahl (z.B. „S. 4") mit der Fundstelle ab
+      (Fundseite oder Folgeseite gilt als passend, da Auszüge über Seitengrenzen reichen).
 - [ ] **Testsammlung** mit ~50 Fragen und den jeweils erwarteten Papern, damit sich
       Änderungen am Ranking messen lassen statt nur stichprobenartig ansehen.
 

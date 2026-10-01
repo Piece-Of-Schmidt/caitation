@@ -33,13 +33,26 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().casefold()
 
 
-def extract_quotes(answer: str) -> list[str]:
-    quotes = []
+# page reference right after a quote: "(Kotenidis & Veglis, 2021, S. 4)", "(p. 12)"
+_PAGE_REF = re.compile(r"\b(?:S\.|Seite|pp?\.)\s*(\d+)")
+_PAGE_REF_WINDOW = 80
+
+
+def _quotes_with_cited_pages(answer: str) -> list[tuple[str, int | None]]:
+    quotes: dict[str, int | None] = {}
     for match in _QUOTE.finditer(answer):
         quote = next(group for group in match.groups() if group is not None).strip()
-        if len(quote) >= MIN_QUOTE_CHARS and quote not in quotes:
-            quotes.append(quote)
-    return quotes
+        if len(quote) < MIN_QUOTE_CHARS or quote in quotes:
+            continue
+        after = answer[match.end() : match.end() + _PAGE_REF_WINDOW].split("\n")[0]
+        after = _QUOTE.split(after)[0]  # stop at the next quote
+        page = _PAGE_REF.search(after)
+        quotes[quote] = int(page.group(1)) if page else None
+    return list(quotes.items())
+
+
+def extract_quotes(answer: str) -> list[str]:
+    return [quote for quote, _page in _quotes_with_cited_pages(answer)]
 
 
 def _fragments(quote: str) -> list[str]:
@@ -90,7 +103,7 @@ def verify_quotes(answer: str, sources: list[dict]) -> list[dict]:
     prepared = [(s, normalize(s.get("text", ""))) for s in sources]
     titles = {s["item_key"]: s.get("title", "") for s in sources}
     results = []
-    for quote in extract_quotes(answer):
+    for quote, cited_page in _quotes_with_cited_pages(answer):
         fragments = [normalize(f) for f in _fragments(quote)]
         status, source, best = "not_found", None, 0.0
 
@@ -118,11 +131,18 @@ def verify_quotes(answer: str, sources: list[dict]) -> list[dict]:
             if status == "not_found":
                 source = None
 
+        found_page = source.get("page") if source else None
         results.append({
             "quote": quote,
             "status": status,
             "item_key": source.get("item_key") if source else None,
             "title": source.get("title", "") if source else "",
-            "page": source.get("page") if source else None,
+            "page": found_page,
+            "cited_page": cited_page,
+            # an excerpt starts on found_page and may run onto the next page
+            "page_mismatch": bool(
+                cited_page and found_page and status != "not_found"
+                and cited_page not in (found_page, found_page + 1)
+            ),
         })
     return results
