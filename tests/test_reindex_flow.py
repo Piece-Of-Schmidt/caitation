@@ -3,11 +3,13 @@ a fake embedding model and a fake Zotero library."""
 
 import json
 import sqlite3
+import threading
 
 import numpy as np
 import pytest
 
 from backend import config, indexer
+from backend import library as library_store
 
 
 class FakeModel:
@@ -23,7 +25,8 @@ def library(tmp_path, monkeypatch, make_item):
     monkeypatch.setattr(config, "FTS_DB", tmp_path / "fts.sqlite")
     monkeypatch.setattr(config, "STATE_FILE", tmp_path / "state.json")
     monkeypatch.setattr(config, "ZOTERO_STORAGE", tmp_path / "storage")
-    monkeypatch.setattr(indexer, "snapshot_database", lambda: tmp_path / "snapshot.sqlite")
+    monkeypatch.setattr(config, "DB_SNAPSHOT", tmp_path / "zotero_snapshot.sqlite")  # none: fresh install
+    monkeypatch.setattr(library_store, "LIBRARY_FILE", tmp_path / "library.json")
     monkeypatch.setattr(indexer, "get_embedding_model", lambda: FakeModel())
 
     page = tmp_path / "storage" / "SNAP0001" / "page.html"
@@ -34,7 +37,7 @@ def library(tmp_path, monkeypatch, make_item):
                   annotations=[{"text": "prices matter most", "comment": "", "page": 3}]),
         make_item(key="BBBB2222", title="Monetary policy in the media", documents=[page]),
     ]
-    monkeypatch.setattr(indexer, "read_items", lambda _path: items)
+    monkeypatch.setattr(indexer.zotero_api, "read_items", lambda: (items, {"users/0": 7}))
     return items
 
 
@@ -56,6 +59,8 @@ def test_first_run_indexes_metadata_highlights_and_full_text(library):
     assert set(state) == {"AAAA1111", "BBBB2222"}
     assert not any(entry.get("fts_pending") for entry in state.values())
     assert indexer.get_progress()["status"] == "done"
+    assert library_store.versions() == {"users/0": 7}
+    assert set(library_store.items_by_key()) == {"AAAA1111", "BBBB2222"}
 
 
 def test_unchanged_library_does_nothing(library, monkeypatch):
@@ -68,7 +73,8 @@ def test_unchanged_library_does_nothing(library, monkeypatch):
 def test_removed_and_changed_items_are_updated(library, monkeypatch, make_item):
     indexer.run_reindex()
     changed = make_item(key="AAAA1111", title="Inflation expectations of households", abstract="Survey evidence.")
-    monkeypatch.setattr(indexer, "read_items", lambda _path: [changed])  # highlight removed, BBBB deleted
+    # highlight removed, BBBB deleted
+    monkeypatch.setattr(indexer.zotero_api, "read_items", lambda: ([changed], {"users/0": 8}))
 
     indexer.run_reindex()
 
@@ -86,7 +92,44 @@ def test_interrupted_run_is_resumed_on_next_start(library, monkeypatch):
     with pytest.raises(KeyboardInterrupt):
         indexer.run_reindex()
     assert indexer.reindex_incomplete()
-    assert main._snapshot_stale()  # -> the server restarts the reindex
+    # Zotero unchanged since then, but the watcher resumes the interrupted run
+    monkeypatch.setattr(main.zotero_api, "library_versions", library_store.versions)
+    assert _watch_once(main, monkeypatch) == 1
+
+
+class _StopAfterFirstRound(threading.Event):
+    def wait(self, timeout=None):
+        self.set()
+        return True
+
+
+def _watch_once(main, monkeypatch) -> int:
+    """Runs one round of the server's Zotero watcher; returns how many reindexes it started."""
+    started = []
+    monkeypatch.setattr(main, "_start_reindex", lambda: started.append(1) or True)
+    main._watch_zotero(_StopAfterFirstRound())
+    return len(started)
+
+
+def test_watcher_reindexes_when_zotero_changed(library, monkeypatch):
+    from backend import main
+
+    indexer.run_reindex()
+    monkeypatch.setattr(main.zotero_api, "library_versions", lambda: {"users/0": 7})
+    assert _watch_once(main, monkeypatch) == 0  # same version as indexed
+    monkeypatch.setattr(main.zotero_api, "library_versions", lambda: {"users/0": 9})
+    assert _watch_once(main, monkeypatch) == 1
+
+
+def test_watcher_waits_while_zotero_is_closed(library, monkeypatch):
+    from backend import main
+
+    def closed():
+        raise main.zotero_api.CLOSED
+
+    monkeypatch.setattr(main.zotero_api, "library_versions", closed)
+    assert _watch_once(main, monkeypatch) == 0
+    assert main._zotero["state"] == "closed"
 
 
 def test_completed_run_clears_the_resume_marker(library):

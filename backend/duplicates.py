@@ -3,7 +3,7 @@ or normalized title. Groups are reported for manual merging in Zotero."""
 
 import re
 
-from backend.zotero_reader import ZoteroItem
+from backend.library import ZoteroItem
 
 # boilerplate prefixes that some translators prepend to otherwise identical titles
 _TITLE_PREFIXES = re.compile(r"^(full article|original article|research article)\s*[:\-]?\s*", re.IGNORECASE)

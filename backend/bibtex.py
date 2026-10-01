@@ -2,7 +2,7 @@
 
 import re
 
-from backend.zotero_reader import ZoteroItem
+from backend.library import ZoteroItem
 
 _TYPE_MAP = {
     "journalArticle": "article",

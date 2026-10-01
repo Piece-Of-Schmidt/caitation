@@ -1,4 +1,4 @@
-/* global Zotero */
+/* global Services, Zotero */
 
 // Caitation for Zotero: a thin client for the local Caitation app (the Python server
 // does the indexing, search and ranking; this plugin brings it into Zotero).
@@ -8,6 +8,10 @@
 var XHTML = "http://www.w3.org/1999/xhtml";
 var DEFAULT_SERVER = "http://127.0.0.1:8000";
 var MAX_QUERY_CHARS = 1000;
+// Zotero's switch for its local API ("Allow other applications on this computer to
+// communicate with Zotero"), through which the Caitation app reads the library
+var LOCAL_API_PREF = "httpServer.localAPI.enabled";
+var ASKED_PREF = "extensions.caitation.localAPIAsked";
 
 var STRINGS = {
   de: {
@@ -21,6 +25,15 @@ var STRINGS = {
     summary: (n) => `${n} ähnliche`,
     readerSearch: "In Caitation suchen",
     readerEvidence: "Beleg prüfen",
+    accessTitle: "Caitation: Zugriff auf deine Bibliothek",
+    accessText:
+      "Die Caitation-App liest deine Bibliothek über Zoteros offizielle lokale Schnittstelle: " +
+      "nur lesend und nur von diesem Computer aus. Dafür muss Zotero anderen Anwendungen auf " +
+      "diesem Computer die Kommunikation erlauben (Einstellungen → Erweitert).\n\n" +
+      "Jetzt erlauben? Du kannst das jederzeit in den Zotero-Einstellungen wieder abschalten.",
+    accessAllow: "Erlauben",
+    accessNotNow: "Später",
+    accessLater: "Später möglich über Werkzeuge → Caitation: Zugriff auf die Bibliothek erlauben.",
   },
   en: {
     loading: "Looking for similar papers…",
@@ -33,6 +46,15 @@ var STRINGS = {
     summary: (n) => `${n} similar`,
     readerSearch: "Search in Caitation",
     readerEvidence: "Check evidence",
+    accessTitle: "Caitation: access to your library",
+    accessText:
+      "The Caitation app reads your library through Zotero's official local API: read-only " +
+      "and only from this computer. This requires Zotero to allow other applications on this " +
+      "computer to communicate with it (Settings → Advanced).\n\n" +
+      "Allow it now? You can switch it off again in Zotero's settings at any time.",
+    accessAllow: "Allow",
+    accessNotNow: "Later",
+    accessLater: "You can do this later via Tools → Caitation: allow access to the library.",
   },
 };
 
@@ -142,6 +164,12 @@ Caitation = {
             l10nID: "caitation-menu-open",
             onCommand: () => this.openInBrowser(),
           },
+          {
+            menuType: "menuitem",
+            l10nID: "caitation-menu-allow",
+            onShowing: (event, context) => context.setVisible(!this.localAPIEnabled),
+            onCommand: () => this.enableLocalAPI(),
+          },
         ],
       }),
       Zotero.MenuManager.registerMenu({
@@ -182,7 +210,36 @@ Caitation = {
     this.readerListener = null;
   },
 
+  // ------------------------------------------------------------ access for the app
+
+  get localAPIEnabled() {
+    return Boolean(Zotero.Prefs.get(LOCAL_API_PREF));
+  },
+
+  enableLocalAPI() {
+    Zotero.Prefs.set(LOCAL_API_PREF, true); // takes effect immediately, no restart
+  },
+
+  // Asks once (per profile) whether the app may read the library; never switches the
+  // setting on without a yes.
+  askForAccess(window) {
+    if (this.localAPIEnabled || Zotero.Prefs.get(ASKED_PREF, true)) return;
+    Zotero.Prefs.set(ASKED_PREF, true, true);
+    const prompt = Services.prompt;
+    const choice = prompt.confirmEx(
+      window, this.t("accessTitle"), this.t("accessText"),
+      prompt.BUTTON_POS_0 * prompt.BUTTON_TITLE_IS_STRING +
+        prompt.BUTTON_POS_1 * prompt.BUTTON_TITLE_IS_STRING +
+        prompt.BUTTON_POS_0_DEFAULT,
+      this.t("accessAllow"), this.t("accessNotNow"), null, null, {},
+    );
+    if (choice === 0) this.enableLocalAPI();
+    else Services.prompt.alert(window, this.t("accessTitle"), this.t("accessLater"));
+  },
+
   addToWindow(window) {
+    // after the window has settled, so the question does not block Zotero's start
+    window.setTimeout(() => this.askForAccess(window), 2000);
     window.MozXULElement.insertFTLIfNeeded("caitation.ftl");
     const doc = window.document;
     if (doc.getElementById("caitation-stylesheet")) return;

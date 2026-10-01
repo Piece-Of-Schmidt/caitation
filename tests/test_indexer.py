@@ -50,19 +50,35 @@ def test_item_hash_changes_with_new_highlight(make_item):
     assert indexer._item_hash(plain) != indexer._item_hash(highlighted)
 
 
-def test_migration_carries_over_unchanged_items_only(tmp_path, monkeypatch, make_item):
-    unchanged_old, unchanged_new = make_item(key="SAME"), make_item(key="SAME")
-    edited_old, edited_new = make_item(key="EDIT", title="Old"), make_item(key="EDIT", title="New")
-    monkeypatch.setattr(indexer, "read_items", lambda _path: [unchanged_old, edited_old])
-    old_snapshot = tmp_path / "previous.sqlite"  # only has to exist; read_items is faked
-    old_snapshot.touch()
-    state = {"SAME": {"hash": "legacy"}, "EDIT": {"hash": "legacy"}}
+def test_hash_ignores_the_order_zotero_lists_things_in(make_item):
+    one = make_item(tags=["b", "a"], notes=["n2", "n1"],
+                    annotations=[{"text": "y", "comment": "", "page": 2}, {"text": "x", "comment": "", "page": 1}])
+    other = make_item(tags=["a", "b"], notes=["n1", "n2"],
+                      annotations=[{"text": "x", "comment": "", "page": 1}, {"text": "y", "comment": "", "page": 2}])
+    assert indexer._item_hash(one) == indexer._item_hash(other)
 
-    carried = indexer._migrate_state(state, [unchanged_new, edited_new], old_snapshot)
+
+def test_upgrade_carries_over_items_unchanged_since_indexing(tmp_path, monkeypatch, make_item):
+    # what v0.1 indexed (its database copy) vs. what Zotero's API reports now
+    indexed = {k: make_item(key=k, tags=["x", "y"]) for k in ("SAME", "EDIT", "STALE")}
+    now = [make_item(key="SAME", tags=["y", "x"]),  # same content, other tag order
+           make_item(key="EDIT", tags=["x", "y"], title="Edited in Zotero"),
+           make_item(key="STALE", tags=["x", "y"])]
+    monkeypatch.setattr(indexer.zotero_sqlite, "read_items", lambda _path: list(indexed.values()))
+    old_snapshot = tmp_path / "zotero_snapshot.sqlite"  # only has to exist; read_items is faked
+    old_snapshot.touch()
+    state = {
+        "SAME": {"hash": indexer._content_hash_v2(indexed["SAME"]), "v": 2},
+        "EDIT": {"hash": indexer._content_hash_v2(indexed["EDIT"]), "v": 2},
+        # indexed before its last change (e.g. run interrupted): the copy is not what was indexed
+        "STALE": {"hash": "older", "v": 2},
+    }
+
+    carried = indexer._migrate_state(state, now, old_snapshot)
 
     assert carried == 1
-    assert state["SAME"] == {"hash": indexer._item_hash(unchanged_new), "v": indexer.HASH_VERSION}
-    assert state["EDIT"] == {"hash": "legacy"}  # will be re-indexed
+    assert state["SAME"] == {"hash": indexer._item_hash(now[0]), "v": indexer.HASH_VERSION}
+    assert state["EDIT"]["v"] == 2 and state["STALE"]["v"] == 2  # both will be re-indexed
 
 
 # ---------------------------------------------------------------- keyword index
@@ -169,3 +185,10 @@ def test_no_eta_in_the_first_seconds(monkeypatch):
     indexer._start_eta(10)
     indexer._eta["done"] = 5
     assert indexer._eta_seconds() is None
+
+
+def test_hash_ignores_the_html_wrapper_around_notes(make_item):
+    from_api = make_item(notes=["Comment: Published at ICLR 2020"])
+    from_database = make_item(notes=['<div class="zotero-note znv1">Comment: Published at ICLR 2020</div>'])
+    assert indexer._item_hash(from_api) == indexer._item_hash(from_database)
+    assert indexer._note_text("<p>A &amp; B</p>\n<p>C</p>") == "A & B C"

@@ -1,12 +1,12 @@
-"""Extracts PDF full text + metadata for every Zotero item, chunks it, embeds it
+"""Extracts full text + metadata for every Zotero item (read through Zotero's local API), chunks it, embeds it
 locally and stores it in a persistent Chroma collection. Skips items that have not
 changed since the last run (tracked via data/state.json)."""
 
 import hashlib
+import html
 import json
 import os
 import re
-import shutil
 import sqlite3
 import sys
 import time
@@ -20,7 +20,8 @@ from sentence_transformers import SentenceTransformer
 
 from backend.documents import extract_sections
 from backend.textclean import clean_text, looks_garbled
-from backend.zotero_reader import ZoteroItem, read_items, snapshot_database
+from backend import library, zotero_api, zotero_sqlite
+from backend.library import ZoteroItem
 
 COLLECTION_NAME = "zotero_library"
 
@@ -153,7 +154,7 @@ def _save_state(state: dict) -> None:
     config.STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
-HASH_VERSION = 2
+HASH_VERSION = 3
 
 
 def _relative_pdf_path(path: Path) -> str:
@@ -173,16 +174,18 @@ def _file_id(path: Path) -> str:
         return hashlib.sha256(path.as_posix().encode("utf-8")).hexdigest()[:12]
 
 
-def _content_hash(item: ZoteroItem, with_file_sizes: bool) -> str:
-    h = hashlib.sha256()
-    h.update(item.title.encode("utf-8", "ignore"))
-    h.update(item.abstract.encode("utf-8", "ignore"))
-    h.update("|".join(item.tags).encode("utf-8", "ignore"))
-    h.update("|".join(item.notes).encode("utf-8", "ignore"))
-    for a in item.annotations:
-        h.update(f"{a['text']}|{a['comment']}|{a['page']}".encode("utf-8", "ignore"))
-    # documents only contribute when present, so PDF-only items keep their old hash
+_TAG = re.compile(r"<[^>]+>")
+
+
+def _note_text(note: str) -> str:
+    """Plain text of a Zotero note (HTML). Zotero's API and its database differ in the
+    wrapper they put around a note, the text is the same."""
+    return " ".join(html.unescape(_TAG.sub(" ", note)).split())
+
+
+def _file_entries(item: ZoteroItem, with_file_sizes: bool) -> list[str]:
     files = [("", p) for p in item.pdf_paths] + [("doc:", p) for p in item.documents]
+    entries = []
     for prefix, p in files:
         entry = prefix + _relative_pdf_path(p)
         if with_file_sizes:
@@ -190,6 +193,35 @@ def _content_hash(item: ZoteroItem, with_file_sizes: bool) -> str:
                 entry += f":{p.stat().st_size}"
             except OSError:
                 pass
+        entries.append(entry)
+    return entries
+
+
+def _content_hash(item: ZoteroItem, with_file_sizes: bool) -> str:
+    """Everything that ends up in the index. Sorted, so the order in which Zotero lists
+    tags, notes, highlights and files does not matter (the local API and the old
+    database reader list them differently)."""
+    h = hashlib.sha256()
+    h.update(item.title.encode("utf-8", "ignore"))
+    h.update(item.abstract.encode("utf-8", "ignore"))
+    for part in (sorted(item.tags), sorted(_note_text(n) for n in item.notes),
+                 sorted(f"{a['text']}|{a['comment']}|{a['page']}" for a in item.annotations),
+                 sorted(_file_entries(item, with_file_sizes))):
+        h.update("\x1f".join(part).encode("utf-8", "ignore"))
+        h.update(b"\x1e")
+    return h.hexdigest()
+
+
+def _content_hash_v2(item: ZoteroItem) -> str:
+    """The order-dependent hash of v0.1 (HASH_VERSION 2); only for the upgrade check."""
+    h = hashlib.sha256()
+    h.update(item.title.encode("utf-8", "ignore"))
+    h.update(item.abstract.encode("utf-8", "ignore"))
+    h.update("|".join(item.tags).encode("utf-8", "ignore"))
+    h.update("|".join(item.notes).encode("utf-8", "ignore"))
+    for a in item.annotations:
+        h.update(f"{a['text']}|{a['comment']}|{a['page']}".encode("utf-8", "ignore"))
+    for entry in _file_entries(item, with_file_sizes=True):
         h.update(entry.encode("utf-8", "ignore"))
     return h.hexdigest()
 
@@ -201,19 +233,26 @@ def _item_hash(item: ZoteroItem) -> str:
 
 
 def _migrate_state(state: dict, items: list[ZoteroItem], old_snapshot: Path | None) -> int:
-    """One-time upgrade of skip-state entries written with the old, path-dependent
-    hash: an item whose content is identical in the previous snapshot is marked
-    up to date without re-embedding. Returns the number of entries carried over."""
+    """One-time upgrade of skip-state entries from older versions (other hash, database
+    reader): an item counts as unchanged if the database copy Caitation indexed it from
+    shows the same content as Zotero's API now. Such items are marked up to date without
+    re-embedding. Returns the number of entries carried over."""
     legacy = {key for key, entry in state.items() if entry.get("v") != HASH_VERSION}
     if not legacy:
         return 0
     old_items = {}
     if old_snapshot is not None and old_snapshot.exists():
-        old_items = {i.key: i for i in read_items(old_snapshot)}
+        try:
+            old_items = {i.key: i for i in zotero_sqlite.read_items(old_snapshot)}
+        except sqlite3.Error:
+            old_items = {}  # unreadable copy: those items are simply indexed again
     carried = 0
     for item in items:
-        old = old_items.get(item.key)
-        if item.key not in legacy or old is None:
+        old, entry = old_items.get(item.key), state.get(item.key, {})
+        if item.key not in legacy or old is None or entry.get("fts_pending"):
+            continue
+        # v2 entries: make sure the copy shows exactly what was indexed back then
+        if entry.get("v") == 2 and entry.get("hash") != _content_hash_v2(old):
             continue
         if _content_hash(old, with_file_sizes=False) == _content_hash(item, with_file_sizes=False):
             state[item.key] = {"hash": _item_hash(item), "v": HASH_VERSION}
@@ -343,7 +382,7 @@ def _metadata_text(item: ZoteroItem) -> str:
     if item.tags:
         parts.append("Tags: " + ", ".join(item.tags))
     if item.notes:
-        parts.append("Notizen: " + " | ".join(item.notes))
+        parts.append("Notizen: " + " | ".join(_note_text(n) for n in item.notes))
     return "\n".join(parts)
 
 
@@ -509,22 +548,14 @@ def _flush_fts(fts_changes: dict, state: dict) -> None:
 
 def run_reindex() -> None:
     _progress.update(status="running", phase="", done=0, total=0, current="Lese Zotero-Bibliothek...")
+    items, versions = zotero_api.read_items()  # raises ZoteroUnavailable if Zotero is closed
     _incomplete_marker().touch()
     state = _load_state()
-    needs_migration = any(entry.get("v") != HASH_VERSION for entry in state.values())
-    previous_snapshot = None
-    if needs_migration and config.DB_SNAPSHOT.exists():
-        # keep the old snapshot around: it is the reference for the state migration
-        previous_snapshot = config.DB_SNAPSHOT.with_suffix(".previous.sqlite")
-        shutil.copy2(config.DB_SNAPSHOT, previous_snapshot)
-    snapshot = snapshot_database()
-    items = read_items(snapshot)
-    if needs_migration:
+    if any(entry.get("v") != HASH_VERSION for entry in state.values()):
         _progress.update(current="Übernehme unveränderte Einträge...")
-        _migrate_state(state, items, previous_snapshot)
+        _migrate_state(state, items, config.DB_SNAPSHOT)
         _save_state(state)
-        if previous_snapshot is not None:
-            previous_snapshot.unlink(missing_ok=True)
+    library.save(items, versions)
 
     client = chromadb.PersistentClient(path=str(config.CHROMA_DIR))
     collection = client.get_or_create_collection(
@@ -594,6 +625,7 @@ def run_reindex() -> None:
     _flush_fts(fts_changes, state)
     _incomplete_marker().unlink(missing_ok=True)
     _text_version_file().write_text(str(TEXT_VERSION))
+    config.DB_SNAPSHOT.unlink(missing_ok=True)  # database copy of v0.1, no longer needed
     _progress.update(status="done", phase="", done=len(todo), current="Fertig")
 
 

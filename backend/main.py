@@ -1,6 +1,5 @@
 import json
 import logging
-import sqlite3
 import threading
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
@@ -11,7 +10,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from backend import config, duplicates, indexer, rag, zotero_reader
+from backend import config, duplicates, indexer, library, rag, zotero_api
 from backend.bibtex import items_to_bibtex
 from backend.security import LocalOnlyMiddleware
 
@@ -37,6 +36,10 @@ def _start_reindex() -> bool:
     def _run():
         try:
             indexer.run_reindex()
+        except zotero_api.ZoteroUnavailable as error:
+            log.warning("Reindex: %s", error)
+            _zotero.update(state=error.reason, message=str(error))
+            indexer.report_error(str(error))
         except Exception as error:
             log.exception("Reindex failed")
             indexer.report_error(f"{type(error).__name__}: {error}")
@@ -47,17 +50,34 @@ def _start_reindex() -> bool:
     return True
 
 
-def _snapshot_stale() -> bool:
-    if indexer.reindex_incomplete() or indexer.needs_text_repair():
-        return True
+# Zotero is watched through its local API: a tiny request per library and minute tells
+# whether anything changed; if so, an incremental reindex picks up just those items.
+POLL_SECONDS = 60
+_zotero = {"state": "unknown", "message": None}  # state: ok, closed, disabled, error
+
+
+def _zotero_changed() -> bool:
+    """True if Zotero's library differs from the stored one; updates the Zotero state."""
     try:
-        zotero_mtime = config.ZOTERO_SQLITE.stat().st_mtime
-    except OSError:
+        current = zotero_api.library_versions()
+    except zotero_api.ZoteroUnavailable as error:
+        _zotero.update(state=error.reason, message=str(error))
         return False
-    return (
-        not config.DB_SNAPSHOT.exists()
-        or zotero_mtime > config.DB_SNAPSHOT.stat().st_mtime
-    )
+    _zotero.update(state="ok", message=None)
+    return current != library.versions()
+
+
+def _watch_zotero(stop: threading.Event) -> None:
+    # an interrupted run or a pending text repair resumes as soon as Zotero is readable
+    resume = indexer.reindex_incomplete() or indexer.needs_text_repair()
+    while not stop.is_set():
+        try:
+            changed = _zotero_changed()
+            if _zotero["state"] == "ok" and (changed or resume) and _start_reindex():
+                resume = False
+        except Exception:
+            log.exception("Zotero check failed")
+        stop.wait(POLL_SECONDS)
 
 
 DEVICE = indexer.compute_device()
@@ -69,11 +89,10 @@ async def lifespan(_app: FastAPI):
     log.info("Caitation: Modelle rechnen auf %s", _DEVICE_LABELS.get(DEVICE, DEVICE))
     # Load models and warm caches in the background so the first search is fast.
     threading.Thread(target=rag.warmup, daemon=True, name="warmup").start()
-    # Incremental reindex if the Zotero library changed since the last snapshot;
-    # unchanged items are skipped by hash, so this is cheap.
-    if _snapshot_stale():
-        _start_reindex()
+    stop = threading.Event()
+    threading.Thread(target=_watch_zotero, args=(stop,), daemon=True, name="zotero-watch").start()
     yield
+    stop.set()
 
 
 app = FastAPI(title="Caitation", lifespan=lifespan)
@@ -229,28 +248,14 @@ def api_reindex_status():
     progress["running"] = _reindex_lock.locked()
     progress["ready"] = rag.is_ready()
     progress["device"] = DEVICE
-    progress["warning"] = _schema_warning()
+    progress["zotero"] = dict(_zotero)
+    # no access at all, or nothing indexed yet: worth a warning; Zotero merely closed
+    # while a stored library exists: just a note (search keeps working)
+    unavailable = _zotero["state"] in ("closed", "disabled", "error")
+    blocking = _zotero["state"] == "disabled" or not library.items_by_key()
+    progress["warning"] = _zotero["message"] if unavailable and blocking else None
+    progress["note"] = _zotero["message"] if unavailable and not blocking else None
     return progress
-
-
-_schema_cache: dict = {}
-
-
-def _schema_warning() -> str | None:
-    """Warning if Zotero's database is newer than the tested layout (cached per snapshot)."""
-    try:
-        mtime = config.DB_SNAPSHOT.stat().st_mtime
-    except OSError:
-        return None
-    if _schema_cache.get("mtime") != mtime:
-        try:
-            version = zotero_reader.schema_version(config.DB_SNAPSHOT)
-        except sqlite3.Error:
-            version = None
-        _schema_cache.update(mtime=mtime, warning=zotero_reader.schema_warning(version))
-        if _schema_cache["warning"]:
-            log.warning(_schema_cache["warning"])
-    return _schema_cache["warning"]
 
 
 class _RevalidatingStaticFiles(StaticFiles):

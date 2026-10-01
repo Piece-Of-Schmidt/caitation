@@ -1,6 +1,6 @@
 import pytest
 
-from backend.zotero_reader import ZoteroItem
+from backend.library import ZoteroItem
 
 
 @pytest.fixture

@@ -20,13 +20,12 @@ from backend.duplicates import dedupe_results
 from backend.indexer import COLLECTION_NAME, get_embedding_model
 from backend.textclean import clean_text
 from backend.verification import verify_quotes
-from backend.zotero_reader import ZoteroItem, read_items
+from backend import library
+from backend.library import ZoteroItem
 
 _reranker: CrossEncoder | None = None
 _collection = None
 _anthropic_client: Anthropic | None = None
-_item_info: dict[str, ZoteroItem] | None = None
-_item_info_mtime: float = 0.0
 
 RRF_K = 60  # standard reciprocal-rank-fusion constant
 
@@ -96,16 +95,9 @@ def _get_anthropic_client() -> Anthropic:
 
 
 def get_item_info() -> dict[str, ZoteroItem]:
-    """Item metadata (tags, collections, year, biblio fields, PDF paths) keyed by
-    Zotero key. Cached; reloaded when the snapshot database changes."""
-    global _item_info, _item_info_mtime
-    if not config.DB_SNAPSHOT.exists():
-        return {}
-    mtime = config.DB_SNAPSHOT.stat().st_mtime
-    if _item_info is None or mtime != _item_info_mtime:
-        _item_info = {item.key: item for item in read_items(config.DB_SNAPSHOT)}
-        _item_info_mtime = mtime
-    return _item_info
+    """Item metadata (tags, collections, year, biblio fields, file paths) keyed by
+    Caitation key, as of the last read from Zotero."""
+    return library.items_by_key()
 
 
 # ---------------------------------------------------------------- retrieval
@@ -249,7 +241,7 @@ def _index_version() -> tuple:
         except OSError:
             return 0.0
 
-    return (mtime(config.FTS_DB), mtime(config.DB_SNAPSHOT))
+    return (mtime(config.FTS_DB), library.mtime())
 
 
 def _cache_get(key):

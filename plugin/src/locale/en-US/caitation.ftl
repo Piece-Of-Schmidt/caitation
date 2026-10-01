@@ -6,3 +6,5 @@ caitation-menu-open =
     .label = Open Caitation
 caitation-menu-related =
     .label = Find similar papers in Caitation
+caitation-menu-allow =
+    .label = Caitation: allow access to the library

@@ -69,10 +69,11 @@ def _zotero_base_attachment_dir() -> Path | None:
 
 
 ZOTERO_DATA_DIR = _zotero_data_dir()
-ZOTERO_SQLITE = ZOTERO_DATA_DIR / "zotero.sqlite"
 ZOTERO_STORAGE = ZOTERO_DATA_DIR / "storage"
 ZOTERO_BASE_ATTACHMENT_DIR = _zotero_base_attachment_dir()
 
+# Copy of Zotero's database written by Caitation up to v0.1. Read once by the upgrade to
+# the local API (see indexer._migrate_state), then deleted.
 DB_SNAPSHOT = DATA_DIR / "zotero_snapshot.sqlite"
 FTS_DB = DATA_DIR / "fts.sqlite"  # keyword index, model-independent
 

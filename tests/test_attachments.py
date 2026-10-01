@@ -3,7 +3,7 @@ from pathlib import Path
 
 from backend import config, indexer
 from backend.documents import extract_sections, html_to_text
-from backend.zotero_reader import resolve_attachment_path
+from backend.zotero_sqlite import resolve_attachment_path
 
 STORAGE = Path("/zotero/storage")
 BASE = Path("/papers")

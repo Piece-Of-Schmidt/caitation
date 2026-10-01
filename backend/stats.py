@@ -9,8 +9,8 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 
-from backend import config
-from backend.zotero_reader import ZoteroItem
+from backend import config, library
+from backend.library import ZoteroItem
 
 CLUSTER_NAME_CACHE = config.DATA_DIR / "cluster_names.json"
 
@@ -111,8 +111,7 @@ _topic_map_cache: dict = {}
 def topic_map(collection, items: dict[str, ZoteroItem]) -> dict:
     """Cached wrapper: KMeans + PCA over all embeddings takes seconds, and the result
     only changes when the library or the index does."""
-    snapshot_mtime = config.DB_SNAPSHOT.stat().st_mtime if config.DB_SNAPSHOT.exists() else 0
-    key = (snapshot_mtime, collection.count())
+    key = (library.mtime(), collection.count())
     if _topic_map_cache.get("key") != key:
         _topic_map_cache.update(key=key, value=_compute_topic_map(collection, items))
     return _topic_map_cache["value"]
