@@ -132,8 +132,10 @@ flowchart LR
     P --> UI
 ```
 
-Caitation liest deine Zotero-Bibliothek, zerlegt Texte in Abschnitte und berechnet für jeden
-Abschnitt lokal einen Bedeutungsvektor. Alles bis hierhin – und die komplette Suche – läuft
+Caitation liest deine Bibliothek über Zoteros offizielle lokale Schnittstelle, zerlegt Texte
+in Abschnitte und berechnet für jeden Abschnitt lokal einen Bedeutungsvektor. Ändert sich etwas
+in Zotero, merkt Caitation das innerhalb einer Minute und verarbeitet nur die geänderten
+Einträge. Alles bis hierhin – und die komplette Suche – läuft
 ohne Internet auf deinem Rechner. Nur wenn du eine Frage stellst oder einen Beleg prüfst,
 gehen die passenden Ausschnitte an die Claude-API.
 
@@ -164,18 +166,24 @@ gehen die passenden Ausschnitte an die Claude-API.
    vorinstalliertes Python ist nicht nötig.
 3. Den API-Key in die Datei `.env` im Caitation-Ordner eintragen (`ANTHROPIC_API_KEY=…`).
 
-### Zotero-Plugin (optional)
+### Zotero vorbereiten: Plugin und Lesezugriff
+
+Caitation liest deine Bibliothek über Zoteros lokale Schnittstelle (nur lesend, nur von deinem
+Computer aus). Die ist in Zotero zunächst ausgeschaltet. Am einfachsten geht das Einschalten
+mit dem Plugin, das Caitation außerdem direkt in Zotero bringt:
 
 1. `caitation-zotero-<Version>.xpi` aus dem
    [neuesten Release](https://github.com/Piece-Of-Schmidt/caitation/releases/latest) herunterladen.
 2. In Zotero: *Werkzeuge → Plugins → Zahnrad → Plugin aus Datei installieren…*
+3. Das Plugin fragt einmal nach dem Zugriff auf deine Bibliothek: **Erlauben**.
 
-Das Plugin aktualisiert sich danach selbst. Es braucht die laufende Caitation-App.
+Ohne Plugin: in Zotero unter *Einstellungen → Erweitert* die Kommunikation mit anderen
+Anwendungen auf diesem Computer erlauben. Das Plugin aktualisiert sich selbst.
 
 ### Die erste Indexierung
 
-Caitation findet deine Zotero-Bibliothek automatisch (auch auf anderen Laufwerken) und
-indexiert sie beim ersten Start:
+Sobald Zotero geöffnet und der Zugriff erlaubt ist, indexiert Caitation deine Bibliothek
+(auch Gruppenbibliotheken und Dateien auf anderen Laufwerken):
 
 1. **Nach wenigen Minuten** sind Titel, Abstracts, Notizen und Highlights aller Einträge
    durchsuchbar.
@@ -183,7 +191,8 @@ indexiert sie beim ersten Start:
    Minute pro Paper; die Statusanzeige oben rechts zeigt die geschätzte Restzeit.
 
 Du kannst Caitation währenddessen nutzen und jederzeit schließen; beim nächsten Start geht es
-an derselben Stelle weiter. Später werden nur neue und geänderte Einträge verarbeitet.
+an derselben Stelle weiter. Danach übernimmt Caitation Änderungen in Zotero automatisch,
+solange beide geöffnet sind.
 
 ## Systemanforderungen
 
@@ -192,7 +201,7 @@ Gemessen mit einer Bibliothek aus 1.228 Einträgen und 1.133 PDFs (3,1 GB):
 | | |
 |---|---|
 | **Betriebssystem** | Windows 10/11, macOS mit Apple Silicon (M1 und neuer), Linux. Intel-Macs werden von aktuellem PyTorch nicht mehr unterstützt. |
-| **Zotero** | 7 oder neuer; das Plugin braucht Zotero 8 oder 9 |
+| **Zotero** | 7 oder neuer, geöffnet beim Indexieren; das Plugin braucht Zotero 8 oder 9 |
 | **Arbeitsspeicher** | bis zu 3 GB für Caitation, 8 GB im Rechner empfohlen |
 | **Speicherplatz** | ca. 1,3 GB Python und Pakete, 1,5–2,1 GB Modelle, ca. 2 GB Index pro 1.000 Paper |
 | **Download** | ca. 400 MB bei der Einrichtung, 1,5–2,1 GB Modelle beim ersten Indexieren |
@@ -205,6 +214,11 @@ Gemessen mit einer Bibliothek aus 1.228 Einträgen und 1.133 PDFs (3,1 GB):
 | deine Bibliothek, alle PDFs und der Index | im **Fragen- und Beleg-Modus**: deine Frage und die passenden Textausschnitte aus den 6 relevantesten Papern |
 | die komplette Suche, ähnliche Paper, Dubletten | im **Dashboard**: Titel einiger Paper je Themencluster, um die Themen zu benennen |
 | Protokolldatei `data/caitation.log` | |
+
+Den Lesezugriff auf Zotero gibst du über Zoteros eigene Einstellung frei. Sie gilt für alle
+Programme auf deinem Computer (nur lesend, nicht übers Netzwerk) und lässt sich in den
+Zotero-Einstellungen jederzeit wieder abschalten; Caitation braucht sie dann erst beim nächsten
+Aktualisieren wieder.
 
 Jede Person nutzt ihren eigenen API-Key. Ohne Key funktioniert alles außer Fragen,
 Belegprüfung und Themennamen. Der Server ist nur vom eigenen Rechner aus erreichbar und weist
@@ -220,8 +234,7 @@ Einstellungen stehen in der Datei `.env` im Caitation-Ordner (Windows: Startmen�
 | `ANTHROPIC_API_KEY` | Key für Fragen, Belegprüfung und Themennamen |
 | `EMBEDDING_MODEL` | `intfloat/multilingual-e5-small` (Standard, schneller) oder `intfloat/multilingual-e5-base` (findet mehr) |
 | `RERANKER_MODEL` | Modell fürs Nachsortieren; leer lassen schaltet es ab (schneller, ungenauer) |
-| `ZOTERO_DATA_DIR` | Zotero-Datenordner, falls die automatische Erkennung danebenliegt |
-| `ZOTERO_BASE_ATTACHMENT_DIR` | Basisordner für verlinkte Dateien, falls nicht in Zotero eingestellt |
+| `ZOTERO_API_URL` | Adresse von Zoteros lokaler Schnittstelle, falls nicht `http://127.0.0.1:23119/api` |
 
 Nach einem Wechsel des Embedding-Modells wird neu indexiert; jedes Modell hat einen eigenen
 Index unter `data/`.
@@ -237,11 +250,12 @@ PDF-Inhalte, aber den Anfang deiner Suchanfragen – kurz durchsehen vor dem Ver
 </details>
 
 <details>
-<summary><b>Die Statusanzeige ist gelb und warnt vor einer neueren Zotero-Version.</b></summary>
+<summary><b>Die Statusanzeige ist gelb: „Caitation hat noch keinen Lesezugriff auf Zotero“.</b></summary>
 
-Caitation liest Zoteros Datenbank direkt, und Zotero ändert ihr Format gelegentlich. Die
-Warnung erscheint, wenn deine Zotero-Version neuer ist als die zuletzt getestete. Meist
-funktioniert trotzdem alles; falls nicht, hilft ein Update von Caitation.
+Der Zugriff über Zoteros lokale Schnittstelle ist ausgeschaltet. In Zotero *Werkzeuge →
+Caitation: Zugriff auf die Bibliothek erlauben* wählen (mit Plugin) oder unter *Einstellungen →
+Erweitert* die Kommunikation mit anderen Anwendungen erlauben. Caitation merkt das innerhalb
+einer Minute.
 </details>
 
 <details>
@@ -255,8 +269,9 @@ Indexierung jederzeit neu anstoßen; unveränderte Einträge werden dabei übers
 <details>
 <summary><b>Läuft Caitation auch, wenn Zotero geschlossen ist?</b></summary>
 
-Ja. Caitation arbeitet mit einer Kopie der Zotero-Datenbank und den Dateien im
-Zotero-Ordner. Nur das Plugin und die Links „In Zotero zeigen“ brauchen Zotero.
+Ja, mit dem Stand, den Caitation zuletzt aus Zotero gelesen hat: Suche, Fragen, Dashboard und
+PDF-Links funktionieren weiter. Neue oder geänderte Einträge übernimmt Caitation, sobald Zotero
+wieder läuft. Das Plugin und die Links „In Zotero zeigen“ brauchen Zotero ohnehin.
 </details>
 
 <details>

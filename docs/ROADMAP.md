@@ -41,9 +41,12 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 - [x] **Warnung bei unbekanntem Datenbankformat** (2026-10-01, v0.1.1): Ist Zoteros
       `userdata`-Version neuer als 125 (Zotero 9.0.6), warnt die Statusanzeige; scheitert das
       Lesen, nennt die Fehlermeldung die Ursache.
-- [ ] **Zugriff auf Zotero** über offizielle Schnittstellen (lokale API bzw. Plugin) statt die
-      Datenbankdatei zu kopieren; Zotero rät von direktem Datenbankzugriff ab, weil sich das
-      Schema ändern kann. Geplant für das nächste Release (v0.2.0).
+- [x] **Zugriff auf Zotero über die offizielle lokale API** (2026-10-01, v0.2.0) statt einer
+      Kopie der Datenbankdatei (Entscheidung Tobias: nur API, keine Rückfalloption). Caitation
+      fragt jede Minute die Bibliotheksversion ab und übernimmt Änderungen automatisch; der
+      zuletzt gelesene Stand liegt in `data/library.json`, damit die Suche ohne Zotero läuft. Das
+      Plugin fragt einmalig nach der Freigabe der Schnittstelle. Einmalige Migration ohne
+      Neuindexierung (an der echten Bibliothek: 1.228 von 1.228 Einträgen übernommen).
 
 ## 3. Lücken bei fremden Bibliotheken
 
