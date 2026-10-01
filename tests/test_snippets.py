@@ -35,5 +35,6 @@ def test_excerpts_without_page_are_not_labelled_page_zero():
     from backend.rag import _excerpt_location
 
     assert _excerpt_location({"page": 4, "chunk_type": "pdf"}) == "Seite 4"
-    assert "Seite" not in _excerpt_location({"page": 0, "chunk_type": "metadata"})
-    assert "Seite" not in _excerpt_location({"page": 0, "chunk_type": "document"})
+    for chunk_type in ("metadata", "document"):
+        label = _excerpt_location({"page": 0, "chunk_type": chunk_type})
+        assert "Seite 0" not in label and "keine Seitenzahl" in label.replace("ohne", "keine")
