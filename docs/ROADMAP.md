@@ -58,8 +58,10 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
       markiert, mit Quelle und Seite (`backend/verification.py`).
 - [x] Zitatprüfung gleicht die zitierte Seitenzahl (z.B. „S. 4") mit der Fundstelle ab
       (Fundseite oder Folgeseite gilt als passend, da Auszüge über Seitengrenzen reichen).
-- [ ] **Testsammlung** mit ~50 Fragen und den jeweils erwarteten Papern, damit sich
-      Änderungen am Ranking messen lassen statt nur stichprobenartig ansehen.
+- [x] **Werkzeug zur Messung der Suchqualität** (`eval/evaluate.py`, 2026-10-01). Erste 6
+      Fälle: mit Reranker 6/6 in den Top 8 (MRR 0,81), ohne 5/6 (MRR 0,67).
+- [ ] Testsammlung auf ~50 Fälle erweitern (Fragen und erwartete Paper aus der eigenen
+      Arbeit; das kann nur jemand festlegen, der die Literatur kennt).
 
 ## 5. Rechtliches und Datenschutz (auch für ein freies Projekt)
 

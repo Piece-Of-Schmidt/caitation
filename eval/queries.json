@@ -1,0 +1,29 @@
+[
+  {
+    "query": "Wie berichten Medien über die EZB-Geldpolitik?",
+    "expected_titles": ["Monetary policy in the media"],
+    "note": "deutsche Frage, englisches Paper"
+  },
+  {
+    "query": "algorithmic news production is beneficial because of market demands for fast and accurate news",
+    "expected_titles": ["Algorithmic Journalism"],
+    "note": "Kotenidis & Veglis, Beleg-Fall"
+  },
+  {
+    "query": "randomisiertes Experiment Preisinformationen Inflationserwartungen",
+    "expected_titles": ["The Price Is Right"]
+  },
+  {
+    "query": "Probleme zu wissen was Forschungsqualität ist",
+    "expected_titles": ["Forschungsevaluation"],
+    "note": "gescanntes PDF, nur per OCR auffindbar"
+  },
+  {
+    "query": "LDA topic modeling limitations",
+    "expected_titles": ["Applying LDA Topic Modeling in Communication Research", "Topic Modeling for Media and Communication Research"]
+  },
+  {
+    "query": "Interview-Studie zu AI-Adoption in Newsrooms",
+    "expected_titles": ["Artificial Intelligence Practices in Everyday News Production"]
+  }
+]

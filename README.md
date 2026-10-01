@@ -126,6 +126,10 @@ Suchanfragen; sieh sie vor dem Verschicken kurz durch.
 .venv\Scripts\python.exe -m pytest
 ```
 
+Suchqualität messen (bei laufendem Server): `.venv\Scripts\python.exe eval\evaluate.py`
+(mit `--no-rerank` zum Vergleich). Die Testfälle stehen in `eval/queries.json`: Frage plus
+Titel der Paper, die gefunden werden müssen. Ergänze dort Fälle aus deiner eigenen Arbeit.
+
 Offene Punkte und geplante Schritte stehen in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Funktionen
