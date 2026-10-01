@@ -103,3 +103,36 @@ def test_update_fts_replaces_deletes_and_adds(fts_db):
     con.close()
     assert rows == [("A_0", "alpha new"), ("C_0", "gamma"), ("D_0", "delta")]
     assert found == [("D_0",)]
+
+
+# ---------------------------------------------------------------- PDF text
+
+
+class _FakeTextPage:
+    def __init__(self, text):
+        self.text = text
+
+    def get_text_range(self):
+        return self.text
+
+    def close(self):
+        pass
+
+
+class _FakePage:
+    def __init__(self, text):
+        self.text = text
+
+    def get_textpage(self):
+        return _FakeTextPage(self.text)
+
+
+def test_page_text_normalizes_pdfium_line_ends_and_control_chars():
+    raw = "since \r\ncomputers were\x07 able\x01 to\rexecute"
+    assert indexer._page_text(_FakePage(raw)) == "since \ncomputers were able to\nexecute"
+
+
+def test_unreadable_pdf_yields_no_pages(tmp_path):
+    broken = tmp_path / "broken.pdf"
+    broken.write_bytes(b"not a pdf")
+    assert indexer._extract_pdf_pages(broken) == []

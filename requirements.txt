@@ -10,7 +10,7 @@ chromadb==1.5.9
 numpy==2.4.6
 scikit-learn==1.9.0
 
-pymupdf==1.28.0
+pypdfium2==5.13.0  # PDF text + page rendering for OCR (BSD-3-Clause / Apache-2.0)
 rapidocr-onnxruntime==1.4.4  # OCR for scanned PDFs without a text layer
 
 anthropic==0.115.0

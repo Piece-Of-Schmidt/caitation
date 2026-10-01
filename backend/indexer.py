@@ -15,7 +15,7 @@ from pathlib import Path
 from backend import config  # noqa: E402  (must run first: sets HF_HOME env var)
 
 import chromadb
-import fitz  # PyMuPDF
+import pypdfium2 as pdfium
 from sentence_transformers import SentenceTransformer
 
 from backend.zotero_reader import ZoteroItem, read_items, snapshot_database
@@ -120,29 +120,51 @@ def _get_ocr():
 
 
 def _ocr_page(page) -> str:
-    pix = page.get_pixmap(dpi=200)
-    result, _ = _get_ocr()(pix.tobytes("png"))
+    bitmap = page.render(scale=200 / 72)  # 200 dpi
+    try:
+        result, _ = _get_ocr()(bitmap.to_numpy())
+    finally:
+        bitmap.close()
     if not result:
         return ""
     return "\n".join(line[1] for line in result)
 
 
+# PDFium reports line ends as \r\n and leaks a few control characters from some fonts
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _page_text(page) -> str:
+    textpage = page.get_textpage()
+    try:
+        text = textpage.get_text_range()
+    finally:
+        textpage.close()
+    return _CONTROL_CHARS.sub("", text.replace("\r\n", "\n").replace("\r", "\n"))
+
+
 def _extract_pdf_pages(pdf_path: Path) -> list[str]:
     try:
-        doc = fitz.open(pdf_path)
+        pdf = pdfium.PdfDocument(pdf_path)
     except Exception:
         return []
-    pages = [page.get_text() for page in doc]
+    try:
+        pages = [pdf[i] for i in range(len(pdf))]
+        texts = [_page_text(page) for page in pages]
 
-    # scanned PDF (no text layer) -> OCR as fallback
-    if pages and sum(len(p) for p in pages) / len(pages) < 50:
-        try:
-            pages = [_ocr_page(page) for page in doc]
-        except Exception:
-            pass  # keep whatever the text layer gave us
-
-    doc.close()
-    return pages
+        # scanned PDF (no text layer) -> OCR as fallback
+        if texts and sum(len(t) for t in texts) / len(texts) < 50:
+            try:
+                texts = [_ocr_page(page) for page in pages]
+            except Exception:
+                pass  # keep whatever the text layer gave us
+        for page in pages:
+            page.close()
+        return texts
+    except Exception:
+        return []
+    finally:
+        pdf.close()
 
 
 _SENTENCE_END = re.compile(r"[.!?][\"'“”)\]]?\s")
