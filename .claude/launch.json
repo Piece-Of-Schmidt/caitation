@@ -4,7 +4,7 @@
     {
       "name": "zotero-rag-server",
       "runtimeExecutable": ".venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "8000"],
+      "runtimeArgs": ["-m", "backend"],
       "port": 8000
     }
   ]

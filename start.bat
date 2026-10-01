@@ -59,7 +59,7 @@ if defined CAITATION_SETUP_ONLY exit /b 0
 
 echo Caitation startet unter http://127.0.0.1:8000 - dieses Fenster offen lassen.
 start "" cmd /c "timeout /t 4 >nul & start http://127.0.0.1:8000"
-".venv\Scripts\python.exe" -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+".venv\Scripts\python.exe" -m backend
 pause
 exit /b 0
 

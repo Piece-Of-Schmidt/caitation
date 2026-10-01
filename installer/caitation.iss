@@ -92,7 +92,7 @@ begin
   Result := False;
   try
     Http := CreateOleObject('WinHttp.WinHttpRequest.5.1');
-    Http.SetTimeouts(1000, 1000, 1000, 1000);
+    Http.SetTimeouts(3000, 3000, 3000, 3000);  { a busy server can take a moment }
     Http.Open('GET', 'http://127.0.0.1:8000/api/reindex/status', False);
     Http.Send('');
     Result := Http.Status = 200;
