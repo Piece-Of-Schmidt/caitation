@@ -17,7 +17,10 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 - [x] Automatische Tests für die Kernlogik (`pytest`)
 - [x] Automatische Testläufe (GitHub Actions auf Windows, macOS, Linux), grün seit 2026-10-01
 - [x] Startskripte `start.bat` / `start.command` (richten beim ersten Start alles ein)
-- [ ] Echter Installer ohne vorinstalliertes Python (z.B. mit einem Paketierwerkzeug)
+- [x] **Kein vorinstalliertes Python mehr nötig** (2026-10-01): Die Startskripte holen
+      `uv` (feste Version, Prüfsumme) und richten damit Python 3.11 und alle Pakete im
+      App-Ordner ein (frische Einrichtung unter Windows: 88 s). Die CI prüft genau diesen
+      Weg auf Windows, macOS und Linux. Noch offen: ein Installer mit Startmenü-Eintrag.
 - [x] Fehlerprotokoll `data/caitation.log`; fehlgeschlagener Reindex wird in der Oberfläche angezeigt
 
 ## 2. Entscheidungen
@@ -47,10 +50,14 @@ Stand: 2026-10-01. Erledigtes wird abgehakt, nicht gelöscht.
 - [x] **Erste Indexierung zweiphasig** (2026-10-01): erst Titel, Abstracts, Notizen und
       Highlights aller Einträge (Minuten), dann die Volltexte; die Stichwortsuche wird
       alle 25 Einträge aktualisiert.
-- [ ] Erste Indexierung: ehrliche Zeitschätzung anzeigen; GPU bzw. Apple Silicon nutzen,
-      wenn vorhanden.
-- [ ] **Systemanforderungen dokumentieren** (~3 GB RAM, mehrere GB Download für Modelle
-      und Pakete, ~2 GB Index pro 1000 Paper).
+- [x] **Restzeit-Anzeige** beim Indexieren (2026-10-01), gewichtet nach Dateigröße und
+      hochgerechnet aus dem bisherigen Tempo des Rechners.
+- [x] **GPU bzw. Apple Silicon** werden automatisch genutzt (2026-10-01); `start.bat`
+      installiert bei NVIDIA-Karten die GPU-Version von PyTorch. Ungetestet mangels Hardware.
+- [x] **Abgebrochene Indexierung wird beim nächsten Start fortgesetzt** (2026-10-01; vorher
+      erst, wenn sich in Zotero etwas änderte).
+- [x] **Systemanforderungen dokumentiert** (README, 2026-10-01; gemessen: 2,9 GB RAM
+      Spitze, 1,3 GB Pakete, 1,5–2,1 GB Modelle, ca. 2 GB Index pro 1.000 Paper).
 - [ ] An weiteren Bibliotheken testen (andere Fächer, Sprachen, Größen).
 
 ## 4. Verlässlichkeit der Belege

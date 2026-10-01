@@ -47,6 +47,8 @@ def _start_reindex() -> bool:
 
 
 def _snapshot_stale() -> bool:
+    if indexer.reindex_incomplete():
+        return True
     try:
         zotero_mtime = config.ZOTERO_SQLITE.stat().st_mtime
     except OSError:
@@ -57,8 +59,13 @@ def _snapshot_stale() -> bool:
     )
 
 
+DEVICE = indexer.compute_device()
+_DEVICE_LABELS = {"cuda": "GPU (CUDA)", "mps": "Apple-Grafikchip (MPS)", "cpu": "CPU"}
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    log.info("Caitation: Modelle rechnen auf %s", _DEVICE_LABELS.get(DEVICE, DEVICE))
     # Load models and warm caches in the background so the first search is fast.
     threading.Thread(target=rag.warmup, daemon=True, name="warmup").start()
     # Incremental reindex if the Zotero library changed since the last snapshot;
@@ -220,6 +227,7 @@ def api_reindex_status():
     progress = indexer.get_progress()
     progress["running"] = _reindex_lock.locked()
     progress["ready"] = rag.is_ready()
+    progress["device"] = DEVICE
     return progress
 
 

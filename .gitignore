@@ -7,3 +7,4 @@ data/
 .pytest_tmp/
 .claude/settings.local.json
 dist/
+.tools/

@@ -138,3 +138,34 @@ def test_unreadable_pdf_yields_no_pages(tmp_path):
     broken = tmp_path / "broken.pdf"
     broken.write_bytes(b"not a pdf")
     assert indexer._extract_pdf_pages(broken) == []
+
+
+# ---------------------------------------------------------------- remaining time
+
+
+def test_item_weight_grows_with_file_size(tmp_path, make_item):
+    small, large = tmp_path / "small.pdf", tmp_path / "large.pdf"
+    small.write_bytes(b"x" * 1_000)
+    large.write_bytes(b"x" * 900_000)
+    missing = tmp_path / "gone.pdf"
+    assert indexer._item_weight(make_item(pdf_paths=[missing])) == indexer.ITEM_OVERHEAD
+    assert indexer._item_weight(make_item(pdf_paths=[large])) > indexer._item_weight(
+        make_item(pdf_paths=[small])
+    )
+
+
+def test_eta_extrapolates_from_weighted_progress(monkeypatch):
+    clock = iter([1000.0, 1060.0, 1060.0])
+    monkeypatch.setattr(indexer.time, "monotonic", lambda: next(clock))
+    indexer._start_eta(400)
+    assert indexer._eta_seconds() is None  # nothing done yet
+    indexer._eta["done"] = 100  # a quarter in 60 s -> three quarters in 180 s
+    assert indexer._eta_seconds() == 180
+
+
+def test_no_eta_in_the_first_seconds(monkeypatch):
+    clock = iter([1000.0, 1005.0])
+    monkeypatch.setattr(indexer.time, "monotonic", lambda: next(clock))
+    indexer._start_eta(10)
+    indexer._eta["done"] = 5
+    assert indexer._eta_seconds() is None

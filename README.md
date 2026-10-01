@@ -10,15 +10,19 @@ kleine, lokal laufende Weboberfläche.
 
 ## Einmaliges Setup
 
-Voraussetzung: Python 3.11 und Zotero 7. Rechne mit ~3 GB Arbeitsspeicher und mehreren GB
-Download (PyTorch und die Modelle) sowie ~2 GB Index pro 1000 Paper.
-
 **Einfachster Weg:** `start.bat` (Windows) bzw. `start.command` (macOS/Linux)
-doppelklicken. Beim ersten Start richtet das Skript alles ein (dauert einige Minuten),
-danach startet es Caitation und öffnet den Browser. Den API-Key (Schritt 2) trägst du in
-die dann angelegte Datei `.env` ein.
+doppelklicken. Ein vorinstalliertes Python ist nicht nötig: Beim ersten Start lädt das
+Skript das Installationswerkzeug [uv](https://github.com/astral-sh/uv) (feste Version,
+Prüfsumme wird kontrolliert), richtet damit Python 3.11 und alle Pakete im Caitation-Ordner
+ein (ca. 1,5 Minuten bei schneller Leitung), startet Caitation und öffnet den Browser.
+Danach startet es in Sekunden. Den API-Key (Schritt 2 unten) trägst du in die dann
+angelegte Datei `.env` ein. Alles liegt in diesem einen Ordner (`.tools`, `.venv`, `data`):
+Zum Deinstallieren genügt es, ihn zu löschen.
 
-Von Hand:
+Unter macOS blockiert Gatekeeper beim ersten Mal womöglich `start.command`, weil die Datei
+aus dem Internet stammt: Rechtsklick → *Öffnen* → *Öffnen* bestätigt sie einmalig.
+
+Von Hand (mit eigenem Python 3.11):
 
 1. Virtuelle Umgebung anlegen und Pakete installieren (PowerShell):
    ```
@@ -39,25 +43,49 @@ Das Zotero-Datenverzeichnis wird automatisch aus den Zotero-Einstellungen gelese
 einem Umzug, z.B. auf ein anderes Laufwerk); ohne eigene Einstellung gilt
 `%USERPROFILE%\Zotero`. Mit `ZOTERO_DATA_DIR` in `.env` lässt es sich fest vorgeben.
 
-Das Embedding-Modell wird über `EMBEDDING_MODEL` in `.env` gewählt (aktuell
-`intfloat/multilingual-e5-base`). Jedes Modell bekommt ein eigenes Index-Verzeichnis unter
+Das Embedding-Modell wird über `EMBEDDING_MODEL` in `.env` gewählt (Standard
+`intfloat/multilingual-e5-small`; `intfloat/multilingual-e5-base` findet mehr, indexiert
+aber langsamer). Jedes Modell bekommt ein eigenes Index-Verzeichnis unter
 `data/` — nach einem Modellwechsel einmal den Indexer laufen lassen, alte
 `chroma*`-Verzeichnisse nicht mehr genutzter Modelle können gelöscht werden.
 
+## Systemanforderungen
+
+Gemessen an einer Bibliothek mit 1.213 Einträgen und 1.133 PDFs (3,1 GB), Modell
+`multilingual-e5-base`, Windows 10:
+
+| | Bedarf |
+|---|---|
+| Betriebssystem | Windows 10/11 (getestet), macOS mit Apple Silicon (M1 und neuer), Linux; Intel-Macs werden von aktuellen PyTorch-Versionen nicht mehr unterstützt |
+| Zotero | 7 oder neuer (das Plugin braucht Zotero 8 oder 9) |
+| Arbeitsspeicher | ca. 3 GB für Caitation (Spitzenwert beim Indexieren 2,9 GB); 8 GB im Rechner empfohlen |
+| Download beim ersten Start | ca. 400 MB Python und Pakete, dazu beim ersten Indexieren die Modelle: ca. 1,5 GB mit `e5-small`, 2,1 GB mit `e5-base` (inkl. Reranker) |
+| Speicherplatz | ca. 1,3 GB Python und Pakete, 1,5–2,1 GB Modelle, ca. 2 GB Index pro 1.000 Paper |
+| Internet | nur für Einrichtung, Modell-Download und den Frage-/Beleg-Modus |
+
+**Dauer der ersten Indexierung:** Titel, Abstracts und Highlights sind nach wenigen
+Minuten durchsuchbar. Die Volltexte folgen im Hintergrund; auf einem normalen Laptop ohne
+Grafikkarte dauert das mit `e5-base` rund eine halbe Minute pro Paper (bei uns etwa 9
+Stunden für 1.200 Paper), mit `e5-small` spürbar schneller. Gescannte PDFs (OCR) brauchen
+deutlich länger. Die Statusanzeige zeigt die geschätzte Restzeit; Caitation lässt sich
+währenddessen schon nutzen und kann jederzeit beendet werden: Beim nächsten Start setzt es
+die Indexierung fort, bereits verarbeitete Paper werden nicht wiederholt.
+
+**Grafikkarte:** Eine NVIDIA-Grafikkarte (Windows/Linux) oder Apple Silicon (M1 und neuer)
+wird automatisch genutzt und beschleunigt das Indexieren deutlich. Unter Windows
+installiert `start.bat` dafür die GPU-Version von PyTorch, wenn es beim ersten Start eine
+NVIDIA-Karte findet (größerer Download, ca. 2,5 GB). Worauf gerechnet wird, steht im
+Tooltip der Statusanzeige und in `data/caitation.log`.
+
 ## Bibliothek indexieren
 
-Einmalig (und danach jederzeit erneut, wenn neue Paper hinzukommen — unveränderte Einträge
-werden übersprungen und nicht neu verarbeitet):
+Das passiert automatisch beim Start, wenn sich die Zotero-Bibliothek geändert hat, und
+lässt sich über den ↻-Button oben rechts anstoßen. Unveränderte Einträge werden
+übersprungen; Folgeläufe verarbeiten nur neue und geänderte Einträge. Von Hand:
 
 ```
 .venv\Scripts\python.exe -m backend.indexer
 ```
-
-Bei ~1000 Einträgen mit PDF-Anhang dauert der erste vollständige Lauf auf einer normalen
-CPU einige Zeit (PDF-Textextraktion + Embedding). Folgeläufe sind deutlich schneller, da nur
-neue/geänderte Einträge verarbeitet werden (auch der Volltextindex wird dann nur für diese
-Einträge aktualisiert). Alternativ über den ↻-Button oben rechts in der Weboberfläche
-anstoßen.
 
 ## Server starten
 

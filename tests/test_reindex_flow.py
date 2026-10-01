@@ -74,3 +74,21 @@ def test_removed_and_changed_items_are_updated(library, monkeypatch, make_item):
 
     assert fts_rows() == [("AAAA1111", "metadata")]
     assert set(json.loads(config.STATE_FILE.read_text(encoding="utf-8"))) == {"AAAA1111"}
+
+
+def test_interrupted_run_is_resumed_on_next_start(library, monkeypatch):
+    from backend import main
+
+    def crash(*_args):
+        raise KeyboardInterrupt  # e.g. the window was closed during the full-text phase
+
+    monkeypatch.setattr(indexer, "_fulltext_chunks", crash)
+    with pytest.raises(KeyboardInterrupt):
+        indexer.run_reindex()
+    assert indexer.reindex_incomplete()
+    assert main._snapshot_stale()  # -> the server restarts the reindex
+
+
+def test_completed_run_clears_the_resume_marker(library):
+    indexer.run_reindex()
+    assert not indexer.reindex_incomplete()

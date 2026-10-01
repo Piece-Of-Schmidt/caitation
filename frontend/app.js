@@ -1305,6 +1305,19 @@ function setPill(stateName, text, title = "") {
   els.statusPill.title = title || text;
 }
 
+const DEVICE_LABELS = { cuda: "Grafikkarte (CUDA)", mps: "Apple-Grafikchip", cpu: "Prozessor (CPU)" };
+
+/** Rough, honest remaining time ("noch ca. 3 Std."); null while there is no estimate yet. */
+function remainingTime(seconds) {
+  if (seconds == null) return null;
+  const minutes = seconds / 60;
+  if (minutes < 2) return "gleich fertig";
+  if (minutes < 60) return `noch ca. ${Math.round(minutes / (minutes < 15 ? 1 : 5)) * (minutes < 15 ? 1 : 5)} Min.`;
+  const hours = minutes / 60;
+  if (hours < 10) return `noch ca. ${numberFmt.format(Math.round(hours * 2) / 2)} Std.`;
+  return `noch ca. ${Math.round(hours)} Std.`;
+}
+
 async function pollStatus() {
   serverStatus.polling = true;
   let s;
@@ -1323,8 +1336,12 @@ async function pollStatus() {
 
   if (s.running) {
     const phase = { quick: "Titel & Abstracts", fulltext: "Volltexte" }[s.phase] || "Indexiere";
-    const text = s.total ? `${phase} ${numberFmt.format(s.done)} / ${numberFmt.format(s.total)}` : "Lese Bibliothek…";
-    setPill("indexing", text, s.current || text);
+    const eta = remainingTime(s.eta_seconds);
+    const text = s.total
+      ? `${phase} ${numberFmt.format(s.done)} / ${numberFmt.format(s.total)}${eta ? ` · ${eta}` : ""}`
+      : "Lese Bibliothek…";
+    const device = DEVICE_LABELS[s.device] || s.device;
+    setPill("indexing", text, [s.current, device && `Rechnet auf: ${device}`].filter(Boolean).join("\n"));
     els.progress.hidden = !s.total;
     if (s.total) els.progressBar.style.width = `${((s.done / s.total) * 100).toFixed(1)}%`;
   } else {

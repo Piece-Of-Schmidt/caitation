@@ -37,12 +37,62 @@ def get_embedding_model() -> SentenceTransformer:
     return _embedding_model
 
 
+# Remaining-time estimate. Progress is weighted (full texts by file size, since a
+# 300-page scan takes far longer than a two-page article) and extrapolated from the
+# speed so far, so it also reflects how fast this particular machine is.
+ETA_MIN_ELAPSED = 20  # seconds before the first estimate; earlier ones are noise
+ITEM_OVERHEAD = 50_000  # weight of an item beyond its file bytes (model call, writes)
+_eta = {"started": 0.0, "total": 0, "done": 0}
+
+
+def _start_eta(total_weight: int) -> None:
+    _eta.update(started=time.monotonic(), total=total_weight, done=0)
+
+
+def _eta_seconds() -> int | None:
+    elapsed = time.monotonic() - _eta["started"]
+    if _eta["done"] <= 0 or elapsed < ETA_MIN_ELAPSED:
+        return None
+    return round(elapsed / _eta["done"] * max(_eta["total"] - _eta["done"], 0))
+
+
+def _item_weight(item: ZoteroItem) -> int:
+    size = 0
+    for path in [*item.pdf_paths, *item.documents]:
+        try:
+            size += path.stat().st_size
+        except OSError:
+            pass
+    return ITEM_OVERHEAD + size
+
+
+def compute_device() -> str:
+    """Where the models run: "cuda" (NVIDIA), "mps" (Apple Silicon) or "cpu".
+    sentence-transformers picks the fastest one automatically."""
+    from sentence_transformers.util import get_device_name
+
+    return get_device_name()
+
+
 def get_progress() -> dict:
-    return dict(_progress)
+    progress = dict(_progress)
+    if progress["status"] == "running" and progress["phase"]:
+        progress["eta_seconds"] = _eta_seconds()
+    return progress
 
 
 def report_error(message: str) -> None:
     _progress.update(status="error", current=message)
+
+
+def _incomplete_marker() -> Path:
+    return config.STATE_FILE.with_suffix(".incomplete")
+
+
+def reindex_incomplete() -> bool:
+    """True if the last reindex was interrupted (window closed, crash): the server then
+    resumes it on its next start even if Zotero itself has not changed since."""
+    return _incomplete_marker().exists()
 
 
 def _load_state() -> dict:
@@ -407,6 +457,7 @@ def _flush_fts(fts_changes: dict, state: dict) -> None:
 
 def run_reindex() -> None:
     _progress.update(status="running", phase="", done=0, total=0, current="Lese Zotero-Bibliothek...")
+    _incomplete_marker().touch()
     state = _load_state()
     needs_migration = any(entry.get("v") != HASH_VERSION for entry in state.values())
     previous_snapshot = None
@@ -453,6 +504,7 @@ def run_reindex() -> None:
     # batches. On a first run this makes the whole library findable within minutes,
     # while the slow full-text phase below can take hours.
     _progress.update(phase="quick", total=len(todo), done=0, current="Titel, Abstracts und Highlights")
+    _start_eta(len(todo))
     quick: dict[str, tuple[list, list, list]] = {}
     batch = ([], [], [])
     for idx, (item, _hash) in enumerate(todo):
@@ -464,15 +516,19 @@ def run_reindex() -> None:
             _embed_and_add(collection, *batch)
             batch = ([], [], [])
             _progress.update(done=idx + 1)
+            _eta["done"] = idx + 1
     fts_changes.update(quick)
     _flush_fts(fts_changes, state)
 
     # Phase 2: full texts (PDFs incl. OCR, web pages, EPUBs)
+    weights = [_item_weight(item) for item, _hash in todo]
     _progress.update(phase="fulltext", done=0)
+    _start_eta(sum(weights))
     for idx, (item, new_hash) in enumerate(todo):
         _progress.update(done=idx, current=item.title[:80])
         ids, documents, metadatas = _fulltext_chunks(item)
         _embed_and_add(collection, ids, documents, metadatas)
+        _eta["done"] += weights[idx]
         q_ids, q_docs, q_metas = quick[item.key]
         fts_changes[item.key] = (q_ids + ids, q_docs + documents, q_metas + metadatas)
         # fts_pending until the keyword index has this item (see the recovery above)
@@ -482,6 +538,7 @@ def run_reindex() -> None:
             _flush_fts(fts_changes, state)
 
     _flush_fts(fts_changes, state)
+    _incomplete_marker().unlink(missing_ok=True)
     _progress.update(status="done", phase="", done=len(todo), current="Fertig")
 
 

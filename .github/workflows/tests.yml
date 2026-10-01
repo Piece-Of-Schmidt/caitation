@@ -11,16 +11,29 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      CAITATION_SETUP_ONLY: "1"  # start scripts set everything up, then exit
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install CPU-only PyTorch (smaller, no GPU drivers needed)
-        if: runner.os != 'macOS'
-        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - run: python -m pip install -r requirements-dev.txt
-      - run: python -m pytest -q
+      # The same first-start setup colleagues get: no preinstalled Python needed.
+      - name: Setup via start.bat
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: start.bat
+      - name: Setup via start.command
+        if: runner.os != 'Windows'
+        run: ./start.command
+      - name: Python of the app environment
+        run: |
+          py=.venv/bin/python; [ -x "$py" ] || py=.venv/Scripts/python.exe
+          echo "PY=$py" >> "$GITHUB_ENV"
+      - run: .tools/uv pip install --python .venv -r requirements-dev.txt
+      - run: $PY -m pytest -q
       - name: Plugin package builds
-        run: python plugin/build.py
+        run: $PY plugin/build.py
+      - name: Frontend has no syntax errors
+        if: runner.os == 'Linux'
+        run: node --check frontend/app.js && node --check plugin/src/caitation.js
