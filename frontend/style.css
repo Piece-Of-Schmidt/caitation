@@ -219,6 +219,7 @@ input, select, button, textarea { font: inherit; color: inherit; }
 .status-pill[data-state="loading"] .status-dot,
 .status-pill[data-state="indexing"] .status-dot { background: var(--accent-gold); animation: pulse 1.2s ease-in-out infinite; }
 .status-pill[data-state="error"] .status-dot { background: var(--accent-red); }
+.status-pill[data-state="warning"] .status-dot { background: var(--accent-gold); }
 .status-pill[data-state="error"] { color: var(--danger); }
 
 @keyframes pulse { 50% { opacity: 0.3; } }

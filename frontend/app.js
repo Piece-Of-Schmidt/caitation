@@ -1349,6 +1349,7 @@ async function pollStatus() {
     if (s.status === "error") {
       setPill("error", "Indexierung fehlgeschlagen", `${s.current} – Details in data/caitation.log`);
     } else if (!s.ready) setPill("loading", "Modelle laden…", "Such- und Ranking-Modelle werden einmalig geladen");
+    else if (s.warning) setPill("warning", "Bereit", s.warning);
     else setPill("ready", "Bereit", s.status === "done" ? "Index ist aktuell" : "Bereit");
     if (wasRunning && s.status === "done") {
       toast("Index aktualisiert");

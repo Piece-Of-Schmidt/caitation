@@ -231,10 +231,52 @@ def _libraries(cur: sqlite3.Cursor) -> dict[int, tuple[int | None, str]]:
     return libraries
 
 
+# Zotero's database layout ("userdata" schema version) this reader was written and tested
+# against (Zotero 9.0.6). Zotero does not promise a stable layout: a newer library gets a
+# warning, and if reading then fails, the error names the likely cause.
+TESTED_SCHEMA_VERSION = 125
+
+
+class ZoteroSchemaError(RuntimeError):
+    pass
+
+
+def _schema_version(cur: sqlite3.Cursor) -> int | None:
+    try:
+        row = cur.execute("select version from version where schema = 'userdata'").fetchone()
+    except sqlite3.Error:
+        return None
+    return row[0] if row else None
+
+
+def schema_version(db_path: Path) -> int | None:
+    with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as con:
+        return _schema_version(con.cursor())
+
+
+def schema_warning(version: int | None) -> str | None:
+    if version is not None and version > TESTED_SCHEMA_VERSION:
+        return (
+            "Deine Zotero-Version ist neuer als die, mit der Caitation getestet wurde "
+            f"(Datenbankformat {version}, getestet bis {TESTED_SCHEMA_VERSION}). Falls Einträge "
+            "fehlen oder die Indexierung scheitert, bitte Caitation aktualisieren."
+        )
+    return None
+
+
 def read_items(db_path: Path) -> list[ZoteroItem]:
     # closing(): release the file handle even on errors, so the snapshot can be replaced
     with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as con:
-        return _read_items(con.cursor())
+        cur = con.cursor()
+        try:
+            return _read_items(cur)
+        except sqlite3.Error as error:
+            version = _schema_version(cur)
+            raise ZoteroSchemaError(
+                f"Die Zotero-Datenbank ließ sich nicht lesen ({error}). Wahrscheinlich hat "
+                f"Zotero ihr Format geändert (Datenbankformat {version}, getestet bis "
+                f"{TESTED_SCHEMA_VERSION}); bitte Caitation aktualisieren."
+            ) from error
 
 
 def _read_items(cur: sqlite3.Cursor) -> list[ZoteroItem]:

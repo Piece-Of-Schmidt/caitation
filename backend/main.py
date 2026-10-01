@@ -1,5 +1,6 @@
 import json
 import logging
+import sqlite3
 import threading
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
@@ -10,7 +11,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from backend import config, duplicates, indexer, rag
+from backend import config, duplicates, indexer, rag, zotero_reader
 from backend.bibtex import items_to_bibtex
 from backend.security import LocalOnlyMiddleware
 
@@ -228,7 +229,28 @@ def api_reindex_status():
     progress["running"] = _reindex_lock.locked()
     progress["ready"] = rag.is_ready()
     progress["device"] = DEVICE
+    progress["warning"] = _schema_warning()
     return progress
+
+
+_schema_cache: dict = {}
+
+
+def _schema_warning() -> str | None:
+    """Warning if Zotero's database is newer than the tested layout (cached per snapshot)."""
+    try:
+        mtime = config.DB_SNAPSHOT.stat().st_mtime
+    except OSError:
+        return None
+    if _schema_cache.get("mtime") != mtime:
+        try:
+            version = zotero_reader.schema_version(config.DB_SNAPSHOT)
+        except sqlite3.Error:
+            version = None
+        _schema_cache.update(mtime=mtime, warning=zotero_reader.schema_warning(version))
+        if _schema_cache["warning"]:
+            log.warning(_schema_cache["warning"])
+    return _schema_cache["warning"]
 
 
 class _RevalidatingStaticFiles(StaticFiles):
