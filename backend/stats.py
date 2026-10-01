@@ -28,7 +28,7 @@ def library_stats(items: dict[str, ZoteroItem]) -> dict:
         types[item.item_type] += 1
         tags.update(item.tags)
         collections.update(item.collections)
-        if item.pdf_paths:
+        if item.pdf_paths or item.documents:
             n_pdf += 1
         n_annotations += len(item.annotations)
     return {
@@ -157,6 +157,7 @@ def _compute_topic_map(collection, items: dict[str, ZoteroItem]) -> dict:
                 "year": item.year,
                 "item_type": item.item_type,
                 "collection": item.collections[0] if item.collections else "",
+                "zotero_link": item.zotero_link,
                 "tags": item.tags[:4],
             }
         )

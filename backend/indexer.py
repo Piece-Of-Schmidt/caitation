@@ -18,6 +18,7 @@ import chromadb
 import pypdfium2 as pdfium
 from sentence_transformers import SentenceTransformer
 
+from backend.documents import extract_sections
 from backend.zotero_reader import ZoteroItem, read_items, snapshot_database
 
 COLLECTION_NAME = "zotero_library"
@@ -61,6 +62,15 @@ def _relative_pdf_path(path: Path) -> str:
         return path.as_posix()
 
 
+def _file_id(path: Path) -> str:
+    """Stable id of an attachment file for chunk ids: the Zotero attachment key for
+    stored files, a short path hash for linked files (which share folders)."""
+    try:
+        return path.relative_to(config.ZOTERO_STORAGE).parts[0]
+    except ValueError:
+        return hashlib.sha256(path.as_posix().encode("utf-8")).hexdigest()[:12]
+
+
 def _content_hash(item: ZoteroItem, with_file_sizes: bool) -> str:
     h = hashlib.sha256()
     h.update(item.title.encode("utf-8", "ignore"))
@@ -69,8 +79,10 @@ def _content_hash(item: ZoteroItem, with_file_sizes: bool) -> str:
     h.update("|".join(item.notes).encode("utf-8", "ignore"))
     for a in item.annotations:
         h.update(f"{a['text']}|{a['comment']}|{a['page']}".encode("utf-8", "ignore"))
-    for p in item.pdf_paths:
-        entry = _relative_pdf_path(p)
+    # documents only contribute when present, so PDF-only items keep their old hash
+    files = [("", p) for p in item.pdf_paths] + [("doc:", p) for p in item.documents]
+    for prefix, p in files:
+        entry = prefix + _relative_pdf_path(p)
         if with_file_sizes:
             try:
                 entry += f":{p.stat().st_size}"
@@ -182,7 +194,8 @@ def _sentence_boundary(text: str, target_end: int, window_start: int) -> int:
 
 def _chunk_pages(pages: list[str]) -> list[tuple[str, int]]:
     """Returns list of (chunk_text, starting_page_number). Windows are char-based
-    but end on sentence boundaries where possible, so quotes stay intact."""
+    but end on sentence boundaries where possible, so quotes stay intact. Also used for
+    unpaginated documents (sections instead of pages); callers then drop the number."""
     full_text = ""
     page_offsets = []
     for page_text in pages:
@@ -397,11 +410,11 @@ def run_reindex() -> None:
                 }
             )
 
-        for pdf_path in item.pdf_paths:
-            attachment_key = pdf_path.parent.name  # unique Zotero attachment key
-            pages = _extract_pdf_pages(pdf_path)
-            for chunk_idx, (chunk_text, page_num) in enumerate(_chunk_pages(pages)):
-                ids.append(f"{item.key}_pdf_{attachment_key}_{chunk_idx}")
+        sources = [("pdf", path, _extract_pdf_pages) for path in item.pdf_paths]
+        sources += [("doc", path, extract_sections) for path in item.documents]
+        for kind, path, extract in sources:
+            for chunk_idx, (chunk_text, page_num) in enumerate(_chunk_pages(extract(path))):
+                ids.append(f"{item.key}_{kind}_{_file_id(path)}_{chunk_idx}")
                 documents.append(chunk_text)
                 metadatas.append(
                     {
@@ -410,8 +423,8 @@ def run_reindex() -> None:
                         "authors": item.authors_str,
                         "date": item.date,
                         "item_type": item.item_type,
-                        "chunk_type": "pdf",
-                        "page": page_num,
+                        "chunk_type": "pdf" if kind == "pdf" else "document",
+                        "page": page_num if kind == "pdf" else 0,  # web pages have no pages
                     }
                 )
 

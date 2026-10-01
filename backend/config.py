@@ -18,28 +18,60 @@ from dotenv import load_dotenv  # noqa: E402
 # happens to already be set in the shell (e.g. from other local tooling).
 load_dotenv(override=True)
 
+def _zotero_prefs() -> list[str]:
+    """Contents of Zotero's profile prefs.js files (Windows, macOS and Linux locations)."""
+    home = Path.home()
+    profile_roots = [
+        Path(os.environ.get("APPDATA", home / "AppData" / "Roaming")) / "Zotero" / "Zotero" / "Profiles",
+        home / "Library" / "Application Support" / "Zotero" / "Profiles",
+        home / ".zotero" / "zotero",
+    ]
+    return [
+        prefs.read_text(encoding="utf-8", errors="ignore")
+        for root in profile_roots
+        for prefs in root.glob("*/prefs.js")
+    ]
+
+
+def _pref(prefs_text: str, name: str):
+    """Value of user_pref("name", value) in a prefs.js text (JS literal), or None."""
+    match = re.search(
+        rf'user_pref\("{re.escape(name)}", ("(?:[^"\\]|\\.)*"|true|false|-?\d+)\);', prefs_text
+    )
+    return json.loads(match.group(1)) if match else None  # e.g. "E:\\Zotero" -> E:\Zotero
+
+
 def _zotero_data_dir() -> Path:
     """ZOTERO_DATA_DIR from .env wins; otherwise the custom data directory Zotero
     itself remembers in its profile prefs (so moving the library, e.g. to another
     drive, needs no config change here); otherwise Zotero's default location."""
     if os.environ.get("ZOTERO_DATA_DIR"):
         return Path(os.environ["ZOTERO_DATA_DIR"])
-    profiles = Path(os.environ.get("APPDATA", "")) / "Zotero" / "Zotero" / "Profiles"
-    for prefs in profiles.glob("*/prefs.js"):
-        text = prefs.read_text(encoding="utf-8", errors="ignore")
-        if 'user_pref("extensions.zotero.useDataDir", true);' not in text:
+    for prefs in _zotero_prefs():
+        if _pref(prefs, "extensions.zotero.useDataDir") is not True:
             continue
-        match = re.search(r'user_pref\("extensions\.zotero\.dataDir", ("(?:[^"\\]|\\.)*")\);', text)
-        if match:
-            path = Path(json.loads(match.group(1)))  # JS string literal, e.g. "E:\\Zotero"
-            if (path / "zotero.sqlite").exists():
-                return path
+        path = _pref(prefs, "extensions.zotero.dataDir")
+        if path and (Path(path) / "zotero.sqlite").exists():
+            return Path(path)
     return Path.home() / "Zotero"
+
+
+def _zotero_base_attachment_dir() -> Path | None:
+    """Base directory for linked files stored as relative "attachments:" paths
+    (Zotero: Settings > Files and Folders > Linked Attachment Base Directory)."""
+    if os.environ.get("ZOTERO_BASE_ATTACHMENT_DIR"):
+        return Path(os.environ["ZOTERO_BASE_ATTACHMENT_DIR"])
+    for prefs in _zotero_prefs():
+        path = _pref(prefs, "extensions.zotero.baseAttachmentPath")
+        if path:
+            return Path(path)
+    return None
 
 
 ZOTERO_DATA_DIR = _zotero_data_dir()
 ZOTERO_SQLITE = ZOTERO_DATA_DIR / "zotero.sqlite"
 ZOTERO_STORAGE = ZOTERO_DATA_DIR / "storage"
+ZOTERO_BASE_ATTACHMENT_DIR = _zotero_base_attachment_dir()
 
 DB_SNAPSHOT = DATA_DIR / "zotero_snapshot.sqlite"
 FTS_DB = DATA_DIR / "fts.sqlite"  # keyword index, model-independent

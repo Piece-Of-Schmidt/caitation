@@ -62,7 +62,7 @@ def find_duplicate_groups(items: dict[str, ZoteroItem]) -> list[dict]:
                         "year": i.year,
                         "item_type": i.item_type,
                         "has_pdf": bool(i.pdf_paths),
-                        "zotero_link": f"zotero://select/library/items/{i.key}",
+                        "zotero_link": i.zotero_link,
                     }
                     for i in group["items"]
                 ],

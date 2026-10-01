@@ -226,6 +226,8 @@ def _passes_filters(item: ZoteroItem | None, filters: dict) -> bool:
         return False
     if filters.get("collection") and filters["collection"] not in item.collections:
         return False
+    if filters.get("library") and filters["library"] != item.library_name:
+        return False
     return True
 
 
@@ -382,7 +384,8 @@ def search(
                 ],
                 "score": best.get("similarity"),
                 "rank_score": best["rank_score"],
-                "zotero_link": f"zotero://select/library/items/{item_key}",
+                "zotero_link": item.zotero_link if item else f"zotero://select/library/items/{item_key}",
+                "library": item.library_name if item else "",
                 "has_pdf": bool(item and item.pdf_paths),
                 "_context": best["text"][:3200],
             }
@@ -423,7 +426,8 @@ def related(item_key: str, top_k: int = 6) -> list[dict]:
             "snippet": (item.abstract[:400] if item and item.abstract else ""),
             "matches": [],
             "score": 1 - distance,
-            "zotero_link": f"zotero://select/library/items/{key}",
+            "zotero_link": item.zotero_link if item else f"zotero://select/library/items/{key}",
+            "library": item.library_name if item else "",
             "has_pdf": bool(item and item.pdf_paths),
         }
         if len(seen) >= top_k * 2:

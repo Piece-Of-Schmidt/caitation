@@ -314,6 +314,7 @@ const FILTER_FIELDS = {
   year_to: $("#yearTo"),
   item_type: $("#itemType"),
   collection: $("#collectionSelect"),
+  library: $("#librarySelect"),
   tag: $("#tagInput"),
 };
 const annotationsOnly = $("#annotationsOnly");
@@ -356,6 +357,10 @@ async function loadFilters() {
     const types = data.item_types.map((t) => [t, typeLabel(t)]).sort((a, b) => a[1].localeCompare(b[1], "de"));
     for (const [value, label] of types) typeSel.appendChild(new Option(label, value));
     for (const c of data.collections) collSel.appendChild(new Option(c, c));
+    const libSel = FILTER_FIELDS.library;
+    libSel.length = 1;
+    for (const lib of data.libraries || []) libSel.appendChild(new Option(lib, lib));
+    libSel.closest(".field").hidden = (data.libraries || []).length < 2; // only with group libraries
     $("#tagList").innerHTML = data.tags.map((t) => `<option value="${escapeHtml(t)}"></option>`).join("");
     if (data.year_min) FILTER_FIELDS.year_from.placeholder = data.year_min;
     if (data.year_max) FILTER_FIELDS.year_to.placeholder = data.year_max;
@@ -837,7 +842,7 @@ function bindTopicMap(root, points, clusters) {
   svg.addEventListener("mouseleave", hideTooltip);
   svg.addEventListener("click", (e) => {
     const dot = e.target.closest("circle");
-    if (dot) window.location.href = `zotero://select/library/items/${points[Number(dot.dataset.idx)].key}`;
+    if (dot) window.location.href = points[Number(dot.dataset.idx)].zotero_link;
   });
 
   const legend = root.querySelector(".legend");

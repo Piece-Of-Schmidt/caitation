@@ -81,12 +81,20 @@ Caitation = {
     Zotero.launchURL(`${this.serverURL}/${query ? `?${query}` : ""}`);
   },
 
-  findItemByKey(key) {
-    for (const library of Zotero.Libraries.getAll()) {
-      const item = Zotero.Items.getByLibraryAndKey(library.libraryID, key);
-      if (item) return item;
-    }
-    return null;
+  // Caitation's key for an item: the plain Zotero key in the personal library,
+  // "g<groupID>:<KEY>" in group libraries (keys are only unique per library).
+  caitationKey(item) {
+    if (item.libraryID === Zotero.Libraries.userLibraryID) return item.key;
+    const groupID = Zotero.Groups.getGroupIDFromLibraryID(item.libraryID);
+    return groupID ? `g${groupID}:${item.key}` : item.key;
+  },
+
+  findItemByKey(caitationKey) {
+    const match = /^g(\d+):(.+)$/.exec(caitationKey);
+    const libraryID = match
+      ? Zotero.Groups.getLibraryIDFromGroupID(Number(match[1]))
+      : Zotero.Libraries.userLibraryID;
+    return (libraryID && Zotero.Items.getByLibraryAndKey(libraryID, match ? match[2] : caitationKey)) || null;
   },
 
   async selectItem(key) {
@@ -151,7 +159,7 @@ Caitation = {
             onCommand: (event, context) => {
               const item = this.regularItem((context.items || [])[0]);
               if (item) {
-                this.openInBrowser({ related: item.key, title: item.getField("title") });
+                this.openInBrowser({ related: this.caitationKey(item), title: item.getField("title") });
               }
             },
           },
@@ -217,12 +225,13 @@ Caitation = {
 
   async renderRelated(body, item, setSectionSummary) {
     if (!item) return;
-    body.dataset.caitationKey = item.key;
+    const key = this.caitationKey(item);
+    body.dataset.caitationKey = key;
     let results;
     try {
-      results = (await this.apiGet(`/api/related/${encodeURIComponent(item.key)}?top_k=6`)).results;
+      results = (await this.apiGet(`/api/related/${encodeURIComponent(key)}?top_k=6`)).results;
     } catch (error) {
-      if (body.dataset.caitationKey !== item.key) return; // user moved on to another item
+      if (body.dataset.caitationKey !== key) return; // user moved on to another item
       const forbidden = error?.status === 403;
       setSectionSummary("");
       this.renderMessage(body, this.t(forbidden ? "forbidden" : "offline"), {
@@ -234,7 +243,7 @@ Caitation = {
       });
       return;
     }
-    if (body.dataset.caitationKey !== item.key) return;
+    if (body.dataset.caitationKey !== key) return;
 
     setSectionSummary(results.length ? this.t("summary", results.length) : "");
     if (!results.length) {
@@ -276,7 +285,7 @@ Caitation = {
     more.className = "caitation-button";
     more.textContent = this.t("openAll");
     more.addEventListener("click", () =>
-      this.openInBrowser({ related: item.key, title: item.getField("title") }),
+      this.openInBrowser({ related: this.caitationKey(item), title: item.getField("title") }),
     );
 
     body.replaceChildren(list, more);

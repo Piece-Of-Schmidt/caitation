@@ -67,16 +67,18 @@ class AskRequest(BaseModel):
     item_type: str | None = None
     tag: str | None = None
     collection: str | None = None
+    library: str | None = None
     annotations_only: bool | None = False
 
 
-def _filters(year_from, year_to, item_type, tag, collection, annotations_only=False) -> dict:
+def _filters(year_from, year_to, item_type, tag, collection, annotations_only=False, library=None) -> dict:
     return {
         "year_from": year_from,
         "year_to": year_to,
         "item_type": item_type,
         "tag": tag,
         "collection": collection,
+        "library": library,
         "annotations_only": annotations_only,
     }
 
@@ -90,10 +92,11 @@ def api_search(
     item_type: str | None = None,
     tag: str | None = None,
     collection: str | None = None,
+    library: str | None = None,
     annotations_only: bool = False,
     rerank: bool = True,
 ):
-    filters = _filters(year_from, year_to, item_type, tag, collection, annotations_only)
+    filters = _filters(year_from, year_to, item_type, tag, collection, annotations_only, library)
     results = rag.search(q, top_k=top_k, filters=filters, rerank=rerank)
     for r in results:
         r.pop("_context", None)  # LLM context only, not needed by the browser
@@ -103,7 +106,8 @@ def api_search(
 @app.post("/api/ask")
 def api_ask(req: AskRequest):
     filters = _filters(
-        req.year_from, req.year_to, req.item_type, req.tag, req.collection, req.annotations_only
+        req.year_from, req.year_to, req.item_type, req.tag, req.collection, req.annotations_only,
+        req.library,
     )
     return rag.ask(req.query, filters=filters, history=req.history, mode=req.mode)
 
@@ -111,7 +115,8 @@ def api_ask(req: AskRequest):
 @app.post("/api/ask/stream")
 def api_ask_stream(req: AskRequest):
     filters = _filters(
-        req.year_from, req.year_to, req.item_type, req.tag, req.collection, req.annotations_only
+        req.year_from, req.year_to, req.item_type, req.tag, req.collection, req.annotations_only,
+        req.library,
     )
 
     def event_stream():
@@ -162,17 +167,19 @@ def api_stats():
 def api_filters():
     """Available filter values (item types, tags, collections, year range)."""
     items = rag.get_item_info().values()
-    types, tags, collections, years = set(), set(), set(), []
+    types, tags, collections, libraries, years = set(), set(), set(), set(), []
     for item in items:
         types.add(item.item_type)
         tags.update(item.tags)
         collections.update(item.collections)
+        libraries.add(item.library_name)
         if item.year:
             years.append(item.year)
     return {
         "item_types": sorted(types),
         "tags": sorted(tags),
         "collections": sorted(collections),
+        "libraries": sorted(libraries),
         "year_min": min(years) if years else None,
         "year_max": max(years) if years else None,
     }
