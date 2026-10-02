@@ -4,7 +4,7 @@
 
 # Caitation
 
-**Durchsuchen, befragen und belegen – mit deiner eigenen Zotero-Bibliothek.**
+**Steroide für deine Zotero-Bibliothek.**
 
 Semantische Suche über Volltexte, Highlights und Metadaten, Antworten mit geprüften Zitaten
 und ein Plugin direkt in Zotero. Läuft auf deinem Rechner, kostenlos und Open Source.
